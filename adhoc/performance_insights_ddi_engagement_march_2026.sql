@@ -32,9 +32,10 @@ select
     , count(case when se.sent_time is not null then spid_mapping.context_value_int else false end) as sends 
     , count(case when se.open_time is not null then spid_mapping.context_value_int else false end) as opens 
 from warehouse_prod_fivetran.site_history.sent_email se 
-inner join warehouse.site.dealer_email_sparkpost_track_events ste
+inner join warehouse_prod_fivetran.site_history.dealer_email_sparkpost_track_events ste
     on se.id = ste.sent_email_id
-    and se._region_ = case
+    and se._region_ =
+                        case
                         when ste.i18n_region = 'XA' then 'NA'
                         else ste.i18n_region end
 inner join warehouse_prod_fivetran.site_history.sent_email_context as spid_mapping
@@ -42,7 +43,7 @@ inner join warehouse_prod_fivetran.site_history.sent_email_context as spid_mappi
     and se._region_ = spid_mapping._region_
     and spid_mapping.context_key = 'sp_id'
 where
-     se.email_type = 'PERFORMANCE_HEALTH'
+     se.email_type IN ('PERFORMANCE_HEALTH', 'PERFORMANCE_HEALTH_UK', 'PERFORMANCE_HEALTH_CA')
     and ste.environment_name = 'PROD'
     and se.email not like '%cargurus%'
     and sent_time::date = $performance_sent_dt 
