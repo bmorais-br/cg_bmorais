@@ -43,7 +43,7 @@ left join warehouse_prod_fivetran.site_history.dealer_email_sparkpost_track_even
 where
      se.email_type IN ('PERFORMANCE_HEALTH', 'PERFORMANCE_HEALTH_UK', 'PERFORMANCE_HEALTH_CA')
     and se.email not like '%cargurus%'
-    and se.sent_time::date = $performance_sent_dt
+    and se.sent_time::date >= DATEADD('day', -1, $performance_sent_dt) and se.sent_time::date <= DATEADD('day', 1, $performance_sent_dt)
 group by all
 ;
 
