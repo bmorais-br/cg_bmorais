@@ -14,13 +14,14 @@ set performance_sent_dt = '2026-03-05';
 
 -- NBDR (DDI) Set email sent start/end datetimes
 -- PRE/POST X DAYS associated with performance_sent_dt
-set nbdr_sent_start_dt = '2026-02-23';  -- 10 days before 3/5/2026
-set nbdr_sent_end_dt = '2026-03-15';  -- 10 days after 3/15/2026
+set nbdr_sent_start_dt = '2026-02-22';  -- 11 days before 3/5/2026
+set nbdr_sent_end_dt = '2026-03-16';  -- 11 days after 3/15/2026
 
 -- Set IMV start/end datetimes
 set imv_start_dt = '2025-01-01'; -- fixed
 set imv_end_dt = '2026-03-31'; 
 -----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
 
 
 -----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -29,28 +30,33 @@ CREATE OR REPLACE TABLE sandbox_cpaoletti.competitive_intelligence.PERFORMANCE_H
 select 
     spid_mapping.context_value_int as service_provider_id
     , spid_mapping._region_
-    , count(case when se.sent_time is not null then spid_mapping.context_value_int else false end) as sends 
-    , count(case when se.open_time is not null then spid_mapping.context_value_int else false end) as opens 
-from warehouse_prod_fivetran.site_history.sent_email se 
-inner join warehouse_prod_fivetran.site_history.dealer_email_sparkpost_track_events ste
-    on se.id = ste.sent_email_id
-    and se._region_ =
-                        case
-                        when ste.i18n_region = 'XA' then 'NA'
-                        else ste.i18n_region end
-inner join warehouse_prod_fivetran.site_history.sent_email_context as spid_mapping
+    , count(distinct case when se.sent_time is not null then spid_mapping.context_value_int else null end) as sends 
+    , count(distinct case when ste.event_type in ('open', 'initial_open') then spid_mapping.context_value_int else null end) as opens 
+from warehouse_prod_fivetran.site_history.sent_email as se 
+left join warehouse_prod_fivetran.site_history.sent_email_context as spid_mapping
     on se.id = spid_mapping.sent_email_id
     and se._region_ = spid_mapping._region_
     and spid_mapping.context_key = 'sp_id'
+left join warehouse_prod_fivetran.site_history.dealer_email_sparkpost_track_events as ste -- this table only populates records if an email was opened or clicked
+    on se.id = ste.sent_email_id
+    and se._region_ = ste._region_
 where
      se.email_type IN ('PERFORMANCE_HEALTH', 'PERFORMANCE_HEALTH_UK', 'PERFORMANCE_HEALTH_CA')
-    and ste.environment_name = 'PROD'
     and se.email not like '%cargurus%'
-    and sent_time::date = $performance_sent_dt 
+    and se.sent_time::date = $performance_sent_dt
 group by all
 ;
------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
+
+/* 
+-- look at results
+select count(distinct concat(service_provider_id, _region_))
+        , sum(sends)
+        , sum(opens)
+        , count(distinct case when opens >0 then concat(service_provider_id, _region_) else null end) 
+from sandbox_cpaoletti.competitive_intelligence.PERFORMANCE_HEALTH_DEALER_LIST 
+*/
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 
 ----------------------------------------------------------------------------------------------------------------------
@@ -563,7 +569,7 @@ select
         dats.service_provider_id,
         dats._region_,
 */
-        account_category,
+
     CASE
         WHEN IFNULL(service_providers.COUNTRY, 'US') = 'US' THEN 'US'
         WHEN service_providers.COUNTRY = 'CA' THEN 'Canada'
@@ -573,7 +579,10 @@ select
         WHEN service_providers.COUNTRY = 'IT' THEN 'Italy'
         WHEN service_providers.COUNTRY = 'FR' THEN 'France'
         ELSE 'Other'
-    END AS country,        
+    END AS country,  
+    
+        coalesce(account_category, dealer_classification) as account_category, -- we sent to a few National GB accounts so this is to make the data pull non-null
+
      case when min_nbdr_change_date < $performance_sent_dt THEN 'PRE' ELSE 'POST' end as time_period
      , count(distinct concat(dats.service_provider_id, dats._region_, inventory_listing_id, listing_area_id, min_nbdr_change_date)) as listing_deal_change_count
       , count(distinct concat(dats.service_provider_id, dats._region_)) as dealer_deal_change_count,
@@ -588,7 +597,7 @@ LEFT JOIN analytics.dealers.service_providers AS cargurus_service_providers ON s
 LEFT JOIN analytics.dealers.dealers  AS dealers ON (cargurus_service_providers."SF_ACCOUNT_ID") = (dealers."SF_ACCOUNT_ID")
 AND service_providers._region_ = dats._region_
 group by ALL
---order by 1, 2 desc
+order by 1 desc, 2 desc
 ;
 ----------------------------------------------------------------------------------------------------------------------
 
@@ -596,7 +605,7 @@ group by ALL
 
 ----------------------------------------------------------------------------------------------------------------------
 -- dealer counts for each account_category associated with dealers who were sent or opened Performance Health email
-select account_category
+select coalesce(account_category, dealer_classification) as account_category
     , CASE
         WHEN IFNULL(service_providers.COUNTRY, 'US') = 'US' THEN 'US'
         WHEN service_providers.COUNTRY = 'CA' THEN 'Canada'
@@ -618,3 +627,33 @@ AND service_providers._region_ = dats._region_
 group by all
 ;
 ----------------------------------------------------------------------------------------------------------------------
+
+
+
+
+-- PH opens 
+select
+        
+        
+    CASE
+        WHEN IFNULL(service_providers.COUNTRY, 'US') = 'US' THEN 'US'
+        WHEN service_providers.COUNTRY = 'CA' THEN 'Canada'
+        WHEN service_providers.COUNTRY = 'GB' THEN 'UK'
+        WHEN service_providers.COUNTRY = 'ES' THEN 'Spain'
+        WHEN service_providers.COUNTRY = 'DE' THEN 'Germany'
+        WHEN service_providers.COUNTRY = 'IT' THEN 'Italy'
+        WHEN service_providers.COUNTRY = 'FR' THEN 'France'
+        ELSE 'Other'
+    END AS country,  
+    
+    count(distinct concat(dats._region_, dats.service_provider_id))
+from sandbox_cpaoletti.competitive_intelligence.PERFORMANCE_HEALTH_DEALER_LIST as dats
+LEFT JOIN WAREHOUSE.SITE.SERVICE_PROVIDERS AS service_providers ON service_providers.location_id = dats.service_provider_id
+and service_providers._region_ = dats._region_
+LEFT JOIN analytics.dealers.service_providers AS cargurus_service_providers ON service_providers.LOCATION_ID = (cargurus_service_providers."SERVICE_PROVIDER_ID")
+      and service_providers._region_ = (cargurus_service_providers."REGION")
+LEFT JOIN analytics.dealers.dealers  AS dealers ON (cargurus_service_providers."SF_ACCOUNT_ID") = (dealers."SF_ACCOUNT_ID")
+where opens >0
+group by all
+
+
