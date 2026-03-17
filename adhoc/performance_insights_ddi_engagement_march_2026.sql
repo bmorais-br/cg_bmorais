@@ -581,7 +581,7 @@ select
         ELSE 'Other'
     END AS country,  
 
---coalesce(account_category, dealer_classification) as account_category, -- we sent to a few National GB accounts so this is to make the data pull non-null
+coalesce(account_category, dealer_classification) as account_category, -- we sent to a few National GB accounts so this is to make the data pull non-null
 
      case when min_nbdr_change_date < $performance_sent_dt THEN 'PRE' ELSE 'POST' end as time_period
      , count(distinct concat(dats.service_provider_id, dats._region_, inventory_listing_id, listing_area_id, min_nbdr_change_date)) as listing_deal_change_count
@@ -596,6 +596,7 @@ LEFT JOIN analytics.dealers.service_providers AS cargurus_service_providers ON s
       and service_providers._region_ = (cargurus_service_providers."REGION")
 LEFT JOIN analytics.dealers.dealers  AS dealers ON (cargurus_service_providers."SF_ACCOUNT_ID") = (dealers."SF_ACCOUNT_ID")
 AND service_providers._region_ = dats._region_
+/* 
 WHERE     CASE
         WHEN IFNULL(service_providers.COUNTRY, 'US') = 'US' THEN 'US'
         WHEN service_providers.COUNTRY = 'CA' THEN 'Canada'
@@ -606,6 +607,7 @@ WHERE     CASE
         WHEN service_providers.COUNTRY = 'FR' THEN 'France'
         ELSE 'Other'
     END = 'Canada' 
+*/
 group by ALL
 order by 1 desc, 2 desc
 ;
@@ -644,7 +646,7 @@ group by all
 -- PH opens 
 select
          
-        
+         /* 
     CASE
         WHEN IFNULL(service_providers.COUNTRY, 'US') = 'US' THEN 'US'
         WHEN service_providers.COUNTRY = 'CA' THEN 'Canada'
@@ -655,7 +657,7 @@ select
         WHEN service_providers.COUNTRY = 'FR' THEN 'France'
         ELSE 'Other'
     END AS country,  
-    
+    */
     count(distinct concat(dats._region_, dats.service_provider_id))
 from sandbox_cpaoletti.competitive_intelligence.PERFORMANCE_HEALTH_DEALER_LIST as dats
 LEFT JOIN WAREHOUSE.SITE.SERVICE_PROVIDERS AS service_providers ON service_providers.location_id = dats.service_provider_id
