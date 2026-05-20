@@ -189,7 +189,7 @@ def load_overview(_session, ew: str, days: int, account_categories: tuple[str, .
     , page_views as (
         select
             be.region
-          , date_trunc('week', be.derived_tstamp::date)  as week_date
+          , be.derived_tstamp::date                       as date
           , be.sd_product_section                         as product
           , count(distinct be.service_provider_id)        as dealers_viewing
           , count(distinct be.user_id)                    as users_viewing
@@ -200,7 +200,7 @@ def load_overview(_session, ew: str, days: int, account_categories: tuple[str, .
         group by all
     )
     select
-        pv.week_date
+        pv.date
       , pv.product
       , t.total_dealers
       , t.total_users
@@ -210,7 +210,7 @@ def load_overview(_session, ew: str, days: int, account_categories: tuple[str, .
       , round(pv.users_viewing   / nullif(t.total_users,   0) * 100, 1) as users_viewing_pct
     from totals t
     inner join page_views pv on t._region_ = pv.region
-    order by pv.week_date desc
+    order by pv.date desc
     """
 
     sql_period = f"""
@@ -242,36 +242,7 @@ def load_overview(_session, ew: str, days: int, account_categories: tuple[str, .
 
 
 @st.cache_data(ttl=3600, show_spinner=False)
-def load_performance(_session, ew: str, days: int, account_categories: tuple[str, ...] = (), accept_staff: bool = True) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
-    sql_agg = f"""
-    with {common_ctes(ew, days, list(account_categories), accept_staff)}
-    , interactions as (
-        select
-            be.region
-          , date_trunc('week', be.derived_tstamp::date) as week_date
-          , count(distinct be.service_provider_id)      as dealers_interacting
-          , count(distinct be.user_id)                  as users_interacting
-        from base_events be
-        where be.sd_product_section = 'Performance'
-          and be.sd_feature in ('QuickActions', 'PerformanceNavigation')
-          and be.sd_element in ('PricingRecommendation', 'SourcingRecommendation',
-                                'MerchandisingRecommendation', 'DealRatingLearnMore', 'LowVDPsLearnMore')
-          and be.sd_event_type in ('Click', 'Change')
-        group by all
-    )
-    select
-        i.week_date
-      , t.total_dealers
-      , t.total_users
-      , i.dealers_interacting
-      , i.users_interacting
-      , round(i.dealers_interacting / nullif(t.total_dealers, 0) * 100, 1) as dealers_interacting_pct
-      , round(i.users_interacting   / nullif(t.total_users,   0) * 100, 1) as users_interacting_pct
-    from totals t
-    inner join interactions i on t._region_ = i.region
-    order by i.week_date desc
-    """
-
+def load_performance(_session, ew: str, days: int, account_categories: tuple[str, ...] = (), accept_staff: bool = True) -> tuple[pd.DataFrame, pd.DataFrame]:
     sql_period = f"""
     with {common_ctes(ew, days, list(account_categories), accept_staff)}
     , summary as (
@@ -301,7 +272,7 @@ def load_performance(_session, ew: str, days: int, account_categories: tuple[str
     , page_views as (
         select
             be.service_provider_id
-          , date_trunc('week', be.derived_tstamp::date) as week_date
+          , be.derived_tstamp::date              as date
           , count(distinct be.user_id) as users_viewing
         from base_events be
         where be.sd_product_section = 'Performance'
@@ -311,7 +282,7 @@ def load_performance(_session, ew: str, days: int, account_categories: tuple[str
     , interactions as (
         select
             be.service_provider_id
-          , date_trunc('week', be.derived_tstamp::date) as week_date
+          , be.derived_tstamp::date              as date
           , count(distinct be.user_id) as users_interacting
         from base_events be
         where be.sd_product_section = 'Performance'
@@ -321,13 +292,13 @@ def load_performance(_session, ew: str, days: int, account_categories: tuple[str
           and be.sd_event_type in ('Click', 'Change')
         group by all
     )
-    , weeks as (
-        select distinct week_date from page_views
+    , dates as (
+        select distinct date from page_views
         union
-        select distinct week_date from interactions
+        select distinct date from interactions
     )
     select
-        w.week_date
+        d.date
       , dt.service_provider_id                                                                 as dealer_id
       , dt.current_dealer_name                                                                 as dealer_name
       , dt.current_account_category_simplified                                                 as account_category
@@ -337,50 +308,20 @@ def load_performance(_session, ew: str, days: int, account_categories: tuple[str
       , round(coalesce(pv.users_viewing,    0) / nullif(dt.total_users_at_dealer, 0) * 100, 1) as viewing_pct
       , round(coalesce(i.users_interacting, 0) / nullif(dt.total_users_at_dealer, 0) * 100, 1) as interaction_pct
     from dealer_totals dt
-    cross join weeks w
-    left join page_views pv  on pv.service_provider_id = dt.service_provider_id and pv.week_date = w.week_date
-    left join interactions i on i.service_provider_id  = dt.service_provider_id and i.week_date  = w.week_date
-    order by w.week_date desc, interaction_pct desc nulls last
+    cross join dates d
+    left join page_views pv  on pv.service_provider_id = dt.service_provider_id and pv.date = d.date
+    left join interactions i on i.service_provider_id  = dt.service_provider_id and i.date  = d.date
+    order by d.date desc, interaction_pct desc nulls last
     """
 
     return (
-        _session.sql(sql_agg).to_pandas(),
         _session.sql(sql_dealer).to_pandas(),
         _session.sql(sql_period).to_pandas(),
     )
 
 
 @st.cache_data(ttl=3600, show_spinner=False)
-def load_competitors(_session, ew: str, days: int, account_categories: tuple[str, ...] = (), accept_staff: bool = True) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
-    sql_agg = f"""
-    with {common_ctes(ew, days, list(account_categories), accept_staff)}
-    , interactions as (
-        select
-            be.region
-          , date_trunc('week', be.derived_tstamp::date) as week_date
-          , count(distinct be.service_provider_id)      as dealers_interacting
-          , count(distinct be.user_id)                  as users_interacting
-        from base_events be
-        where be.sd_product_section = 'Competitors'
-          and be.sd_feature in ('CompetitorsFilters', 'CompetitorsList', 'ShowTopCompetitorsButton')
-          and be.sd_element in ('TableSort', 'RadiusSelector', 'SearchOverlapSelector',
-                                'FranchiseTypeSelector', 'ViewStats', 'ShowTopCompetitorsButton')
-          and be.sd_event_type in ('Click', 'Change')
-        group by all
-    )
-    select
-        i.week_date
-      , t.total_dealers
-      , t.total_users
-      , i.dealers_interacting
-      , i.users_interacting
-      , round(i.dealers_interacting / nullif(t.total_dealers, 0) * 100, 1) as dealers_interacting_pct
-      , round(i.users_interacting   / nullif(t.total_users,   0) * 100, 1) as users_interacting_pct
-    from totals t
-    inner join interactions i on t._region_ = i.region
-    order by i.week_date desc
-    """
-
+def load_competitors(_session, ew: str, days: int, account_categories: tuple[str, ...] = (), accept_staff: bool = True) -> tuple[pd.DataFrame, pd.DataFrame]:
     sql_period = f"""
     with {common_ctes(ew, days, list(account_categories), accept_staff)}
     , summary as (
@@ -410,7 +351,7 @@ def load_competitors(_session, ew: str, days: int, account_categories: tuple[str
     , page_views as (
         select
             be.service_provider_id
-          , date_trunc('week', be.derived_tstamp::date) as week_date
+          , be.derived_tstamp::date              as date
           , count(distinct be.user_id) as users_viewing
         from base_events be
         where be.sd_product_section = 'Competitors'
@@ -420,7 +361,7 @@ def load_competitors(_session, ew: str, days: int, account_categories: tuple[str
     , interactions as (
         select
             be.service_provider_id
-          , date_trunc('week', be.derived_tstamp::date) as week_date
+          , be.derived_tstamp::date              as date
           , count(distinct be.user_id) as users_interacting
         from base_events be
         where be.sd_product_section = 'Competitors'
@@ -430,13 +371,13 @@ def load_competitors(_session, ew: str, days: int, account_categories: tuple[str
           and be.sd_event_type in ('Click', 'Change')
         group by all
     )
-    , weeks as (
-        select distinct week_date from page_views
+    , dates as (
+        select distinct date from page_views
         union
-        select distinct week_date from interactions
+        select distinct date from interactions
     )
     select
-        w.week_date
+        d.date
       , dt.service_provider_id                                                                 as dealer_id
       , dt.current_dealer_name                                                                 as dealer_name
       , dt.current_account_category_simplified                                                 as account_category
@@ -446,17 +387,87 @@ def load_competitors(_session, ew: str, days: int, account_categories: tuple[str
       , round(coalesce(pv.users_viewing,    0) / nullif(dt.total_users_at_dealer, 0) * 100, 1) as viewing_pct
       , round(coalesce(i.users_interacting, 0) / nullif(dt.total_users_at_dealer, 0) * 100, 1) as interaction_pct
     from dealer_totals dt
-    cross join weeks w
-    left join page_views pv  on pv.service_provider_id = dt.service_provider_id and pv.week_date = w.week_date
-    left join interactions i on i.service_provider_id  = dt.service_provider_id and i.week_date  = w.week_date
-    order by w.week_date desc, interaction_pct desc nulls last
+    cross join dates d
+    left join page_views pv  on pv.service_provider_id = dt.service_provider_id and pv.date = d.date
+    left join interactions i on i.service_provider_id  = dt.service_provider_id and i.date  = d.date
+    order by d.date desc, interaction_pct desc nulls last
     """
 
     return (
-        _session.sql(sql_agg).to_pandas(),
         _session.sql(sql_dealer).to_pandas(),
         _session.sql(sql_period).to_pandas(),
     )
+
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def load_feature_breakdown(_session, ew: str, days: int, account_categories: tuple[str, ...] = (), accept_staff: bool = True) -> pd.DataFrame:
+    sql = f"""
+    with {common_ctes(ew, days, list(account_categories), accept_staff)}
+    , vin_interactions_by_element as (
+        select
+            be.region
+          , 'Performance'                          as tab
+          , be.derived_tstamp::date                as date
+          , be.sd_element                          as cta
+          , count(distinct be.service_provider_id) as dealers_interacting
+          , count(distinct be.user_id)             as users_interacting
+        from base_events be
+        where be.sd_product_section = 'Performance'
+          and be.sd_feature in ('QuickActions', 'PerformanceNavigation')
+          and be.sd_element in ('PricingRecommendation', 'SourcingRecommendation',
+                                'MerchandisingRecommendation', 'DealRatingLearnMore', 'LowVDPsLearnMore')
+          and be.sd_event_type in ('Click', 'Change')
+        group by all
+    )
+    , competitors_interactions_by_element as (
+        select
+            be.region
+          , 'Competitors'                          as tab
+          , be.derived_tstamp::date                as date
+          , case
+                when be.sd_feature = 'ComparisonOverlay' and be.sd_element = 'AttributeToggle'
+                    then 'Map Comparison · ' || parse_json(be.sd_element_value):"attribute"::string
+                else be.sd_element
+            end                                    as cta
+          , count(distinct be.service_provider_id) as dealers_interacting
+          , count(distinct be.user_id)             as users_interacting
+        from base_events be
+        where be.sd_product_section = 'Competitors'
+          and be.sd_feature in ('CompetitorsFilters', 'CompetitorsList',
+                                'ShowTopCompetitorsButton', 'ComparisonOverlay')
+          and be.sd_element in ('TableSort', 'RadiusSelector', 'SearchOverlapSelector',
+                                'FranchiseTypeSelector', 'ViewStats', 'ShowTopCompetitorsButton',
+                                'AttributeToggle')
+          and be.sd_event_type in ('Click', 'Change')
+        group by all
+    )
+    select
+        v.tab
+      , v.date
+      , v.cta
+      , v.dealers_interacting
+      , v.users_interacting
+      , round(v.dealers_interacting / nullif(t.total_dealers, 0) * 100, 1) as dealer_share_pct
+      , round(v.users_interacting   / nullif(t.total_users,   0) * 100, 1) as user_share_pct
+    from vin_interactions_by_element v
+    inner join totals t on t._region_ = v.region
+
+    union all
+
+    select
+        c.tab
+      , c.date
+      , c.cta
+      , c.dealers_interacting
+      , c.users_interacting
+      , round(c.dealers_interacting / nullif(t.total_dealers, 0) * 100, 1) as dealer_share_pct
+      , round(c.users_interacting   / nullif(t.total_users,   0) * 100, 1) as user_share_pct
+    from competitors_interactions_by_element c
+    inner join totals t on t._region_ = c.region
+
+    order by tab, date desc, dealer_share_pct desc nulls last
+    """
+    return _session.sql(sql).to_pandas()
 
 
 @st.cache_data(ttl=3600, show_spinner=False)
@@ -549,12 +560,12 @@ def normalize_cols(df: pd.DataFrame) -> pd.DataFrame:
 
 def trend_chart(df, y_col, color_col, title, color_map):
     df = df.copy()
-    df["WEEK_DATE"] = pd.to_datetime(df["WEEK_DATE"]).dt.strftime("%b %d")
+    df["DATE"] = pd.to_datetime(df["DATE"]).dt.strftime("%b %d")
     return (
         alt.Chart(df)
         .mark_line(point=alt.OverlayMarkDef(filled=True, size=60), strokeWidth=2.5)
         .encode(
-            x=alt.X("WEEK_DATE:O", title="Week starting", axis=alt.Axis(labelAngle=-45)),
+            x=alt.X("DATE:O", title="Date", axis=alt.Axis(labelAngle=-45)),
             y=alt.Y(f"{y_col}:Q", title="% of Total", scale=alt.Scale(domain=[0, 100]), axis=alt.Axis(values=[0,25,50,75,100])),
             color=alt.Color(
                 f"{color_col}:N",
@@ -562,7 +573,7 @@ def trend_chart(df, y_col, color_col, title, color_map):
                 legend=alt.Legend(orient="bottom"),
             ),
             tooltip=[
-                alt.Tooltip("WEEK_DATE:O", title="Week starting"),
+                alt.Tooltip("DATE:O", title="Date"),
                 alt.Tooltip(f"{color_col}:N", title="Segment"),
                 alt.Tooltip(f"{y_col}:Q", title="% Total", format=".1f"),
             ],
@@ -623,8 +634,9 @@ cat_tuple = tuple(selected_categories)
 
 with st.spinner("Loading data…"):
     df_overview, df_overview_kpi             = [normalize_cols(d) for d in load_overview(session, engagement_where, days, cat_tuple, ACCEPT_STAFF)]
-    df_perf_agg, df_perf_dealer, df_perf_kpi = [normalize_cols(d) for d in load_performance(session, engagement_where, days, cat_tuple, ACCEPT_STAFF)]
-    df_comp_agg, df_comp_dealer, df_comp_kpi = [normalize_cols(d) for d in load_competitors(session, engagement_where, days, cat_tuple, ACCEPT_STAFF)]
+    df_perf_dealer, df_perf_kpi = [normalize_cols(d) for d in load_performance(session, engagement_where, days, cat_tuple, ACCEPT_STAFF)]
+    df_comp_dealer, df_comp_kpi = [normalize_cols(d) for d in load_competitors(session, engagement_where, days, cat_tuple, ACCEPT_STAFF)]
+    df_feature_breakdown                     = normalize_cols(load_feature_breakdown(session, engagement_where, days, cat_tuple, ACCEPT_STAFF))
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Tabs
@@ -635,7 +647,7 @@ tab_overview, tab_performance, tab_competitors = st.tabs(
 
 # ── Overview ──────────────────────────────────────────────────────────────────
 with tab_overview:
-    st.header(f"Engagement Overview · {period_label} (weekly)")
+    st.header(f"Engagement Overview · {period_label} (daily)")
 
     kpi_comp = df_overview_kpi[df_overview_kpi["PRODUCT"] == "Competitors"]
     kpi_perf = df_overview_kpi[df_overview_kpi["PRODUCT"] == "Performance"]
@@ -667,14 +679,14 @@ with tab_overview:
     with col1:
         st.altair_chart(
             trend_chart(df_overview, "DEALERS_VIEWING_PCT", "PRODUCT",
-                        "% Dealers Viewing Page (weekly)",
+                        "% Dealers Viewing Page (daily)",
                         {"Competitors": C_BLUE, "Performance": C_GREEN}),
             use_container_width=True,
         )
     with col2:
         st.altair_chart(
             trend_chart(df_overview, "USERS_VIEWING_PCT", "PRODUCT",
-                        "% Users Viewing Page (weekly)",
+                        "% Users Viewing Page (daily)",
                         {"Competitors": C_AMBER, "Performance": C_PURPLE}),
             use_container_width=True,
         )
@@ -704,7 +716,7 @@ with tab_performance:
     st.subheader(f"Dealer breakdown · {period_label.lower()}")
     dealer_table(
         df_perf_dealer.rename(columns={
-            "WEEK_DATE":         "Week",
+            "DATE":              "Date",
             "DEALER_ID":         "Dealer ID",
             "DEALER_NAME":       "Dealer Name",
             "ACCOUNT_CATEGORY":  "Account Category",
@@ -715,6 +727,20 @@ with tab_performance:
             "INTERACTION_PCT":   "Interaction %",
         }),
         pct_cols=["Viewing %", "Interaction %"],
+    )
+    st.divider()
+    st.subheader(f"CTA breakdown · {period_label.lower()}")
+    df_perf_features = df_feature_breakdown[df_feature_breakdown["TAB"] == "Performance"].drop(columns="TAB")
+    dealer_table(
+        df_perf_features.rename(columns={
+            "DATE":                "Date",
+            "CTA":                 "CTA",
+            "DEALERS_INTERACTING": "Dealers Interacting",
+            "USERS_INTERACTING":   "Users Interacting",
+            "DEALER_SHARE_PCT":    "Dealer Share %",
+            "USER_SHARE_PCT":      "User Share %",
+        }),
+        pct_cols=["Dealer Share %", "User Share %"],
     )
     user_breakdown_section("perf", "Performance", days, df_perf_dealer)
 
@@ -740,7 +766,7 @@ with tab_competitors:
     st.subheader(f"Dealer breakdown · {period_label.lower()}")
     dealer_table(
         df_comp_dealer.rename(columns={
-            "WEEK_DATE":         "Week",
+            "DATE":              "Date",
             "DEALER_ID":         "Dealer ID",
             "DEALER_NAME":       "Dealer Name",
             "ACCOUNT_CATEGORY":  "Account Category",
@@ -751,5 +777,19 @@ with tab_competitors:
             "INTERACTION_PCT":   "Interaction %",
         }),
         pct_cols=["Viewing %", "Interaction %"],
+    )
+    st.divider()
+    st.subheader(f"CTA breakdown · {period_label.lower()}")
+    df_comp_features = df_feature_breakdown[df_feature_breakdown["TAB"] == "Competitors"].drop(columns="TAB")
+    dealer_table(
+        df_comp_features.rename(columns={
+            "DATE":                "Date",
+            "CTA":                 "CTA",
+            "DEALERS_INTERACTING": "Dealers Interacting",
+            "USERS_INTERACTING":   "Users Interacting",
+            "DEALER_SHARE_PCT":    "Dealer Share %",
+            "USER_SHARE_PCT":      "User Share %",
+        }),
+        pct_cols=["Dealer Share %", "User Share %"],
     )
     user_breakdown_section("comp", "Competitors", days, df_comp_dealer)
