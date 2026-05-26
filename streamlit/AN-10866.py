@@ -22,6 +22,7 @@ C_PURPLE = "#A78BFA"
 ACCEPT_STAFF = True
 
 
+# Distinct account categories from the latest inventory snapshot, used to populate the sidebar filter.
 @st.cache_data(ttl=3600, show_spinner=False)
 def load_account_categories(_session) -> list[str]:
     sql = """
@@ -182,6 +183,8 @@ def common_ctes(ew: str, days: int, account_categories: list[str] | None = None,
 # ─────────────────────────────────────────────────────────────────────────────
 # Data loaders
 # ─────────────────────────────────────────────────────────────────────────────
+# Daily page-view counts per product (Competitors / Performance) for trend charts,
+# plus a single-row period aggregate for the KPI metrics at the top of the Overview tab.
 @st.cache_data(ttl=3600, show_spinner=False)
 def load_overview(_session, ew: str, days: int, account_categories: tuple[str, ...] = (), accept_staff: bool = True) -> tuple[pd.DataFrame, pd.DataFrame]:
     sql_weekly = f"""
@@ -241,6 +244,8 @@ def load_overview(_session, ew: str, days: int, account_categories: tuple[str, .
     return _session.sql(sql_weekly).to_pandas(), _session.sql(sql_period).to_pandas()
 
 
+# Per-dealer daily page views and VIN-specific CTA interactions for the Performance tab.
+# Returns (dealer-level detail, period-level KPI summary).
 @st.cache_data(ttl=3600, show_spinner=False)
 def load_performance(_session, ew: str, days: int, account_categories: tuple[str, ...] = (), accept_staff: bool = True) -> tuple[pd.DataFrame, pd.DataFrame]:
     sql_period = f"""
@@ -320,6 +325,8 @@ def load_performance(_session, ew: str, days: int, account_categories: tuple[str
     )
 
 
+# Per-dealer daily page views and filter/list interactions for the Competitors tab.
+# Returns (dealer-level detail, period-level KPI summary).
 @st.cache_data(ttl=3600, show_spinner=False)
 def load_competitors(_session, ew: str, days: int, account_categories: tuple[str, ...] = (), accept_staff: bool = True) -> tuple[pd.DataFrame, pd.DataFrame]:
     sql_period = f"""
@@ -399,6 +406,8 @@ def load_competitors(_session, ew: str, days: int, account_categories: tuple[str
     )
 
 
+# Daily interaction counts broken down by individual CTA element for both tabs.
+# Used in the "CTA breakdown" tables on the Performance and Competitors tabs.
 @st.cache_data(ttl=3600, show_spinner=False)
 def load_feature_breakdown(_session, ew: str, days: int, account_categories: tuple[str, ...] = (), accept_staff: bool = True) -> pd.DataFrame:
     sql = f"""
@@ -470,6 +479,26 @@ def load_feature_breakdown(_session, ew: str, days: int, account_categories: tup
     return _session.sql(sql).to_pandas()
 
 
+# Returns the most recent _transformed_at_ (model run time) and derived_tstamp (last interaction)
+# for non-staff, non-bot events on the Performance and Competitors tabs. Used to drive the
+# freshness banner at the top of the Overview tab.
+@st.cache_data(ttl=3600, show_spinner=False)
+def load_data_freshness(_session) -> pd.DataFrame:
+    sql = """
+    select
+        max(_transformed_at_) as max_transformed_at
+      , max(derived_tstamp)   as max_derived_tstamp
+    from analytics.traffic.dealer_dashboard_events_normalized
+    where 1=1
+      and is_staff = false
+      and is_bot   = false
+      and sd_product in ('Performance', 'Competitors')
+    """
+    return _session.sql(sql).to_pandas()
+
+
+# Per-user page view and interaction counts for a single dealer, used in the drill-down section.
+# When engagement_only=True, restricts to users who visited the DEP in the last 180 days.
 @st.cache_data(ttl=3600, show_spinner=False)
 def load_user_breakdown(_session, dealer_id: int, product_section: str, days: int, engagement_only: bool) -> pd.DataFrame:
     if product_section == "Performance":
@@ -633,6 +662,7 @@ def user_breakdown_section(tab_key: str, product_section: str, days: int, df_dea
 cat_tuple = tuple(selected_categories)
 
 with st.spinner("Loading data…"):
+    df_freshness                             = normalize_cols(load_data_freshness(session))
     df_overview, df_overview_kpi             = [normalize_cols(d) for d in load_overview(session, engagement_where, days, cat_tuple, ACCEPT_STAFF)]
     df_perf_dealer, df_perf_kpi = [normalize_cols(d) for d in load_performance(session, engagement_where, days, cat_tuple, ACCEPT_STAFF)]
     df_comp_dealer, df_comp_kpi = [normalize_cols(d) for d in load_competitors(session, engagement_where, days, cat_tuple, ACCEPT_STAFF)]
@@ -648,6 +678,37 @@ tab_overview, tab_performance, tab_competitors = st.tabs(
 # ── Overview ──────────────────────────────────────────────────────────────────
 with tab_overview:
     st.header(f"Engagement Overview · {period_label} (daily)")
+
+    if not df_freshness.empty:
+        ET = "America/New_York"
+        now = pd.Timestamp.now("UTC").tz_convert(ET)
+
+        def to_et(val):
+            ts = pd.to_datetime(val)
+            if ts.tzinfo is None:
+                ts = ts.tz_localize("UTC")
+            return ts.tz_convert(ET)
+
+        max_transformed = to_et(df_freshness["MAX_TRANSFORMED_AT"].iloc[0])
+        max_derived     = to_et(df_freshness["MAX_DERIVED_TSTAMP"].iloc[0])
+        is_fresh = (now - max_transformed <= pd.Timedelta(days=1)) and (now - max_derived <= pd.Timedelta(days=1))
+        accent  = C_GREEN if is_fresh else C_AMBER
+        status  = "Data is up to date." if is_fresh else "Data may be stale (last update was more than 1 day ago)."
+        st.markdown(
+            f"""<div style="background-color:{accent}33; border:1px solid {accent}99;
+                            border-radius:6px; padding:10px 16px; margin-bottom:12px;">
+                <strong>{status}</strong><br>
+                <span style="font-size:0.85em;">
+                    Model last run: <strong>{max_transformed.strftime('%Y-%m-%d %H:%M ET')}</strong>
+                    &nbsp;·&nbsp;
+                    Last interaction recorded: <strong>{max_derived.strftime('%Y-%m-%d %H:%M ET')}</strong>
+                </span><br>
+                <span style="font-size:0.8em; opacity:0.65;">
+                    Reflects Performance &amp; Competitors tab activity in the Dealer Engagement Platform.
+                </span>
+            </div>""",
+            unsafe_allow_html=True,
+        )
 
     kpi_comp = df_overview_kpi[df_overview_kpi["PRODUCT"] == "Competitors"]
     kpi_perf = df_overview_kpi[df_overview_kpi["PRODUCT"] == "Performance"]
