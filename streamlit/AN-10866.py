@@ -803,7 +803,8 @@ with tab_performance:
         }),
         pct_cols=["Dealer Share %", "User Share %"],
     )
-    user_breakdown_section("perf", "Performance", days, df_perf_dealer)
+    # TODO: remove after user-level QA
+    # user_breakdown_section("perf", "Performance", days, df_perf_dealer)
 
 
 # ── Competitive Landscape ─────────────────────────────────────────────────────
@@ -853,4 +854,5 @@ with tab_competitors:
         }),
         pct_cols=["Dealer Share %", "User Share %"],
     )
-    user_breakdown_section("comp", "Competitors", days, df_comp_dealer)
+    # TODO: remove after user-level QA
+    # user_breakdown_section("comp", "Competitors", days, df_comp_dealer)
