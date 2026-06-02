@@ -19,7 +19,7 @@ C_AMBER  = "#FBBF24"
 C_PURPLE = "#A78BFA"
 
 # True = include staff events (during internal testing); False = exclude staff after client release
-ACCEPT_STAFF = True
+ACCEPT_STAFF = False
 
 
 # Distinct account categories from the latest inventory snapshot, used to populate the sidebar filter.
@@ -40,6 +40,18 @@ def load_account_categories(_session) -> list[str]:
     return _session.sql(sql).to_pandas()["CURRENT_ACCOUNT_CATEGORY_SIMPLIFIED"].tolist()
 
 
+@st.cache_data(ttl=3600, show_spinner=False)
+def load_dealer_sizes(_session) -> list[str]:
+    sql = """
+    select distinct split_part(current_account_category, '-', 2) as dealer_size
+    from analytics.competitive_intelligence.performance_health_metric_comparison_monthly
+    where current_account_category is not null
+      and split_part(current_account_category, '-', 2) != ''
+    order by 1
+    """
+    return _session.sql(sql).to_pandas()["DEALER_SIZE"].tolist()
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Sidebar
 # ─────────────────────────────────────────────────────────────────────────────
@@ -52,6 +64,14 @@ with st.sidebar:
     )
     ddi_only = st.toggle("DDI report active only", value=False)
     st.caption("When ON, limits to dealers with an active DDI report subscription.")
+    st.divider()
+    all_dealer_sizes = load_dealer_sizes(session)
+    selected_dealer_sizes = st.multiselect(
+        "Dealer size",
+        options=all_dealer_sizes,
+        default=all_dealer_sizes,
+        help="Filter by dealer size derived from account category.",
+    )
     st.divider()
     days_options = {
         "Last 7 days":   7,
@@ -80,6 +100,7 @@ with st.sidebar:
 
 engagement_where = "used_dep_last_180_days" if engagement_only else "true"
 ddi_filter_active = ddi_only
+dealer_size_tuple = tuple(selected_dealer_sizes)
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Shared CTEs
@@ -89,10 +110,15 @@ def _sql_in_list(values: list[str]) -> str:
     return f"({escaped})"
 
 
-def common_ctes(ew: str, days: int, account_categories: list[str] | None = None, accept_staff: bool = True, ddi_only: bool = False) -> str:
+def common_ctes(ew: str, days: int, account_categories: list[str] | None = None, accept_staff: bool = True, ddi_only: bool = False, dealer_sizes: list[str] | None = None) -> str:
     cat_filter = (
         f"and current_account_category_simplified in {_sql_in_list(account_categories)}"
         if account_categories
+        else ""
+    )
+    size_filter = (
+        f"and dealer_size in {_sql_in_list(dealer_sizes)}"
+        if dealer_sizes
         else ""
     )
     ddi_cte = """
@@ -120,6 +146,19 @@ def common_ctes(ew: str, days: int, account_categories: list[str] | None = None,
           and is_staff = false
         group by all
     ){ddi_cte}
+    , dealer_metadata as (
+        select
+            region
+          , service_provider_id
+          , current_dealer_name
+          , current_account_category_simplified
+          , split_part(current_account_category, '-', 2) as dealer_size
+        from analytics.competitive_intelligence.performance_health_metric_comparison_monthly
+        where inventory_date = (
+            select max(inventory_date)
+            from analytics.competitive_intelligence.performance_health_metric_comparison_monthly
+        )
+    )
     , dealers_and_users as (
         select
             sp._region_
@@ -127,21 +166,15 @@ def common_ctes(ew: str, days: int, account_categories: list[str] | None = None,
           , s.user_uuid
           , dm.current_dealer_name
           , dm.current_account_category_simplified
+          , dm.dealer_size
         from warehouse.site.service_providers sp
         left join warehouse.site.person_roles pr
             on cast(substring(pr.entity_id, 3) as int) = sp.location_id
         left join warehouse.site.people p on p.id = pr.person_id
         left join warehouse.site.subscribers s on s.person_id = pr.person_id
-        left join (
-            select service_provider_id, current_dealer_name, current_account_category_simplified
-            from analytics.competitive_intelligence.performance_health_metric_comparison_monthly
-            where country_code = 'US'
-              and inventory_date = (
-                select max(inventory_date)
-                from analytics.competitive_intelligence.performance_health_metric_comparison_monthly
-                where country_code = 'US'
-              )
-        ) dm on dm.service_provider_id = sp.location_id
+        left join dealer_metadata dm
+            on  dm.service_provider_id = sp.location_id
+            and dm.region              = sp._region_
         {ddi_join}
         where pr.enabled = 1
           and pr.role_name = 'ROLE_DD_ADMIN'
@@ -156,6 +189,7 @@ def common_ctes(ew: str, days: int, account_categories: list[str] | None = None,
           , d.user_uuid
           , d.current_dealer_name
           , d.current_account_category_simplified
+          , d.dealer_size
           , ue.min_date is not null as used_dep_last_180_days
         from dealers_and_users d
         left join user_engagement ue
@@ -171,6 +205,7 @@ def common_ctes(ew: str, days: int, account_categories: list[str] | None = None,
         from user_engagement_flags
         where {ew}
           {cat_filter}
+          {size_filter}
         group by all
     )
     , dealer_totals as (
@@ -179,10 +214,12 @@ def common_ctes(ew: str, days: int, account_categories: list[str] | None = None,
           , service_provider_id
           , any_value(current_dealer_name)     as current_dealer_name
           , any_value(current_account_category_simplified) as current_account_category_simplified
+          , any_value(dealer_size)             as dealer_size
           , count(distinct user_uuid)           as total_users_at_dealer
         from user_engagement_flags
         where {ew}
           {cat_filter}
+          {size_filter}
         group by all
     )
     , base_events as (
@@ -202,9 +239,9 @@ def common_ctes(ew: str, days: int, account_categories: list[str] | None = None,
 # Daily page-view counts per product (Competitors / Performance) for trend charts,
 # plus a single-row period aggregate for the KPI metrics at the top of the Overview tab.
 @st.cache_data(ttl=3600, show_spinner=False)
-def load_overview(_session, ew: str, days: int, account_categories: tuple[str, ...] = (), accept_staff: bool = True, ddi_only: bool = False) -> tuple[pd.DataFrame, pd.DataFrame]:
+def load_overview(_session, ew: str, days: int, account_categories: tuple[str, ...] = (), accept_staff: bool = True, ddi_only: bool = False, dealer_sizes: tuple[str, ...] = ()) -> tuple[pd.DataFrame, pd.DataFrame]:
     sql_weekly = f"""
-    with {common_ctes(ew, days, list(account_categories), accept_staff, ddi_only)}
+    with {common_ctes(ew, days, list(account_categories), accept_staff, ddi_only, list(dealer_sizes))}
     , page_views as (
         select
             be.region
@@ -233,7 +270,7 @@ def load_overview(_session, ew: str, days: int, account_categories: tuple[str, .
     """
 
     sql_period = f"""
-    with {common_ctes(ew, days, list(account_categories), accept_staff, ddi_only)}
+    with {common_ctes(ew, days, list(account_categories), accept_staff, ddi_only, list(dealer_sizes))}
     , page_views as (
         select
             be.region
@@ -263,9 +300,9 @@ def load_overview(_session, ew: str, days: int, account_categories: tuple[str, .
 # Per-dealer daily page views and VIN-specific CTA interactions for the Performance tab.
 # Returns (dealer-level detail, period-level KPI summary).
 @st.cache_data(ttl=3600, show_spinner=False)
-def load_performance(_session, ew: str, days: int, account_categories: tuple[str, ...] = (), accept_staff: bool = True, ddi_only: bool = False) -> tuple[pd.DataFrame, pd.DataFrame]:
+def load_performance(_session, ew: str, days: int, account_categories: tuple[str, ...] = (), accept_staff: bool = True, ddi_only: bool = False, dealer_sizes: tuple[str, ...] = ()) -> tuple[pd.DataFrame, pd.DataFrame]:
     sql_period = f"""
-    with {common_ctes(ew, days, list(account_categories), accept_staff, ddi_only)}
+    with {common_ctes(ew, days, list(account_categories), accept_staff, ddi_only, list(dealer_sizes))}
     , summary as (
         select
             count(distinct be.service_provider_id) as dealers_interacting
@@ -289,7 +326,7 @@ def load_performance(_session, ew: str, days: int, account_categories: tuple[str
     """
 
     sql_dealer = f"""
-    with {common_ctes(ew, days, list(account_categories), accept_staff, ddi_only)}
+    with {common_ctes(ew, days, list(account_categories), accept_staff, ddi_only, list(dealer_sizes))}
     , page_views as (
         select
             be.service_provider_id
@@ -344,9 +381,9 @@ def load_performance(_session, ew: str, days: int, account_categories: tuple[str
 # Per-dealer daily page views and filter/list interactions for the Competitors tab.
 # Returns (dealer-level detail, period-level KPI summary).
 @st.cache_data(ttl=3600, show_spinner=False)
-def load_competitors(_session, ew: str, days: int, account_categories: tuple[str, ...] = (), accept_staff: bool = True, ddi_only: bool = False) -> tuple[pd.DataFrame, pd.DataFrame]:
+def load_competitors(_session, ew: str, days: int, account_categories: tuple[str, ...] = (), accept_staff: bool = True, ddi_only: bool = False, dealer_sizes: tuple[str, ...] = ()) -> tuple[pd.DataFrame, pd.DataFrame]:
     sql_period = f"""
-    with {common_ctes(ew, days, list(account_categories), accept_staff, ddi_only)}
+    with {common_ctes(ew, days, list(account_categories), accept_staff, ddi_only, list(dealer_sizes))}
     , summary as (
         select
             count(distinct be.service_provider_id) as dealers_interacting
@@ -370,7 +407,7 @@ def load_competitors(_session, ew: str, days: int, account_categories: tuple[str
     """
 
     sql_dealer = f"""
-    with {common_ctes(ew, days, list(account_categories), accept_staff, ddi_only)}
+    with {common_ctes(ew, days, list(account_categories), accept_staff, ddi_only, list(dealer_sizes))}
     , page_views as (
         select
             be.service_provider_id
@@ -425,9 +462,9 @@ def load_competitors(_session, ew: str, days: int, account_categories: tuple[str
 # Daily interaction counts broken down by individual CTA element for both tabs.
 # Used in the "CTA breakdown" tables on the Performance and Competitors tabs.
 @st.cache_data(ttl=3600, show_spinner=False)
-def load_feature_breakdown(_session, ew: str, days: int, account_categories: tuple[str, ...] = (), accept_staff: bool = True, ddi_only: bool = False) -> pd.DataFrame:
+def load_feature_breakdown(_session, ew: str, days: int, account_categories: tuple[str, ...] = (), accept_staff: bool = True, ddi_only: bool = False, dealer_sizes: tuple[str, ...] = ()) -> pd.DataFrame:
     sql = f"""
-    with {common_ctes(ew, days, list(account_categories), accept_staff, ddi_only)}
+    with {common_ctes(ew, days, list(account_categories), accept_staff, ddi_only, list(dealer_sizes))}
     , vin_interactions_by_element as (
         select
             be.region
@@ -679,10 +716,10 @@ cat_tuple = tuple(selected_categories)
 
 with st.spinner("Loading data…"):
     df_freshness                             = normalize_cols(load_data_freshness(session))
-    df_overview, df_overview_kpi             = [normalize_cols(d) for d in load_overview(session, engagement_where, days, cat_tuple, ACCEPT_STAFF, ddi_filter_active)]
-    df_perf_dealer, df_perf_kpi = [normalize_cols(d) for d in load_performance(session, engagement_where, days, cat_tuple, ACCEPT_STAFF, ddi_filter_active)]
-    df_comp_dealer, df_comp_kpi = [normalize_cols(d) for d in load_competitors(session, engagement_where, days, cat_tuple, ACCEPT_STAFF, ddi_filter_active)]
-    df_feature_breakdown                     = normalize_cols(load_feature_breakdown(session, engagement_where, days, cat_tuple, ACCEPT_STAFF, ddi_filter_active))
+    df_overview, df_overview_kpi             = [normalize_cols(d) for d in load_overview(session, engagement_where, days, cat_tuple, ACCEPT_STAFF, ddi_filter_active, dealer_size_tuple)]
+    df_perf_dealer, df_perf_kpi = [normalize_cols(d) for d in load_performance(session, engagement_where, days, cat_tuple, ACCEPT_STAFF, ddi_filter_active, dealer_size_tuple)]
+    df_comp_dealer, df_comp_kpi = [normalize_cols(d) for d in load_competitors(session, engagement_where, days, cat_tuple, ACCEPT_STAFF, ddi_filter_active, dealer_size_tuple)]
+    df_feature_breakdown                     = normalize_cols(load_feature_breakdown(session, engagement_where, days, cat_tuple, ACCEPT_STAFF, ddi_filter_active, dealer_size_tuple))
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Tabs
