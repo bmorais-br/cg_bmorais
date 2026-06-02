@@ -27,20 +27,15 @@ st.set_page_config(
 # ─────────────────────────────────────────────────────────────────────────────
 with st.sidebar:
     st.title("⚙️ Filters")
-    engagement_only = st.toggle("Engaged users only (last 180d)", value=True)
-    st.caption(
-        "When ON, denominators include only dealers/users who visited "
-        "the Dealer Dashboard in the last 180 days."
+    engagement_only = st.toggle(
+        "Engaged users only (last 180d)",
+        value=True,
+        help="When ON, denominators include only dealers/users who visited the Dealer Dashboard in the last 180 days.",
     )
-    ddi_only = st.toggle("DDI report active only", value=False)
-    st.caption("When ON, limits to dealers with an active DDI report subscription.")
-    st.divider()
-    all_dealer_sizes = load_dealer_sizes(session)
-    selected_dealer_sizes = st.multiselect(
-        "Dealer size",
-        options=all_dealer_sizes,
-        default=all_dealer_sizes,
-        help="Filter by dealer size derived from account category.",
+    ddi_only = st.toggle(
+        "DDI report active only",
+        value=True,
+        help="When ON, limits to dealers with an active DDI report subscription.",
     )
     st.divider()
     days_options = {
@@ -66,6 +61,13 @@ with st.sidebar:
         options=all_categories,
         default=all_categories,
         help="Filter dealer breakdown by account category.",
+    )
+    all_dealer_sizes = load_dealer_sizes(session)
+    selected_dealer_sizes = st.multiselect(
+        "Dealer size",
+        options=all_dealer_sizes,
+        default=all_dealer_sizes,
+        help="Filter by dealer size derived from account category.",
     )
 
 engagement_where = "used_dep_last_180_days" if engagement_only else "true"
