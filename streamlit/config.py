@@ -7,3 +7,5 @@ C_PURPLE = "#A78BFA"
 
 # True = include staff events (during internal testing); False = exclude staff after client release
 ACCEPT_STAFF = False
+
+TZ_EASTERN = "America/New_York"

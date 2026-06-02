@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 from snowflake.snowpark.context import get_active_session
 
-from config import ACCEPT_STAFF, C_BLUE, C_GREEN, C_AMBER, C_PURPLE
+from config import ACCEPT_STAFF, C_BLUE, C_GREEN, C_AMBER, C_PURPLE, TZ_EASTERN
 from queries import (
     load_account_categories,
     load_dealer_sizes,
@@ -71,11 +71,11 @@ with st.sidebar:
 engagement_where = "used_dep_last_180_days" if engagement_only else "true"
 ddi_filter_active = ddi_only
 dealer_size_tuple = tuple(selected_dealer_sizes)
+cat_tuple = tuple(selected_categories)
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Load data
 # ─────────────────────────────────────────────────────────────────────────────
-cat_tuple = tuple(selected_categories)
 
 with st.spinner("Loading data…"):
     df_freshness                             = normalize_cols(load_data_freshness(session))
@@ -91,19 +91,19 @@ tab_overview, tab_performance, tab_competitors = st.tabs(
     ["📈 Overview", "🚗 Performance", "🏁 Competitive Landscape"]
 )
 
+def to_et(val):
+    ts = pd.to_datetime(val)
+    if ts.tzinfo is None:
+        ts = ts.tz_localize("UTC")
+    return ts.tz_convert(TZ_EASTERN)
+
+
 # ── Overview ──────────────────────────────────────────────────────────────────
 with tab_overview:
     st.header(f"Engagement Overview · {period_label} (daily)")
 
     if not df_freshness.empty:
-        ET = "America/New_York"
-        now = pd.Timestamp.now("UTC").tz_convert(ET)
-
-        def to_et(val):
-            ts = pd.to_datetime(val)
-            if ts.tzinfo is None:
-                ts = ts.tz_localize("UTC")
-            return ts.tz_convert(ET)
+        now = pd.Timestamp.now("UTC").tz_convert(TZ_EASTERN)
 
         max_transformed = to_et(df_freshness["MAX_TRANSFORMED_AT"].iloc[0])
         max_derived     = to_et(df_freshness["MAX_DERIVED_TSTAMP"].iloc[0])
