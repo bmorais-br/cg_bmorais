@@ -16,7 +16,32 @@ def _sql_in_list(values: list[str]) -> str:
     return f"({escaped})"
 
 
-def common_ctes(ew: str, days: int, account_categories: list[str] | None = None, accept_staff: bool = True, ddi_only: bool = False, dealer_sizes: list[str] | None = None) -> str:
+# ─── Interaction signal definitions ──────────────────────────────────────────
+# Update these tuples to add or remove tracked features / elements.
+
+PERF_INTERACTION_FEATURES = ('QuickActions', 'PerformanceNavigation')
+PERF_INTERACTION_ELEMENTS = (
+    'PricingRecommendation', 'SourcingRecommendation',
+    'MerchandisingRecommendation', 'DealRatingLearnMore', 'LowVDPsLearnMore',
+)
+
+COMP_INTERACTION_FEATURES = ('CompetitorsFilters', 'CompetitorsList', 'InsightsBanner', 'ComparisonOverlay')
+COMP_INTERACTION_ELEMENTS = (
+    'TableSort', 'RadiusSelector', 'SearchOverlapSelector',
+    'FranchiseTypeSelector', 'ViewStats', 'ShowTopCompetitorsButton', 'AttributeToggle',
+)
+
+INTERACTION_EVENT_TYPES = ('Click', 'Change')
+
+# Pre-built SQL IN-list strings — used directly in f-string SQL queries.
+_PERF_F_SQL = _sql_in_list(list(PERF_INTERACTION_FEATURES))
+_PERF_E_SQL = _sql_in_list(list(PERF_INTERACTION_ELEMENTS))
+_COMP_F_SQL = _sql_in_list(list(COMP_INTERACTION_FEATURES))
+_COMP_E_SQL = _sql_in_list(list(COMP_INTERACTION_ELEMENTS))
+_EVENTS_SQL = _sql_in_list(list(INTERACTION_EVENT_TYPES))
+
+
+def common_ctes(ew: str, days: int, account_categories: list[str] | None = None, accept_staff: bool = False, ddi_only: bool = True, dealer_sizes: list[str] | None = None) -> str:
     """Build the shared WITH-clause CTEs used by every dashboard query.
 
     Parameters
@@ -256,10 +281,9 @@ def load_performance(_session, ew: str, days: int, account_categories: tuple[str
           , count(distinct be.user_id)             as users_interacting
         from base_events be
         where be.sd_product_section = 'Performance'
-          and be.sd_feature in ('QuickActions', 'PerformanceNavigation')
-          and be.sd_element in ('PricingRecommendation', 'SourcingRecommendation',
-                                'MerchandisingRecommendation', 'DealRatingLearnMore', 'LowVDPsLearnMore')
-          and be.sd_event_type in ('Click', 'Change')
+          and be.sd_feature in {_PERF_F_SQL}
+          and be.sd_element in {_PERF_E_SQL}
+          and be.sd_event_type in {_EVENTS_SQL}
     )
     select
         t.total_dealers
@@ -291,10 +315,9 @@ def load_performance(_session, ew: str, days: int, account_categories: tuple[str
           , count(distinct be.user_id) as users_interacting
         from base_events be
         where be.sd_product_section = 'Performance'
-          and be.sd_feature in ('QuickActions', 'PerformanceNavigation')
-          and be.sd_element in ('PricingRecommendation', 'SourcingRecommendation',
-                                'MerchandisingRecommendation', 'DealRatingLearnMore', 'LowVDPsLearnMore')
-          and be.sd_event_type in ('Click', 'Change')
+          and be.sd_feature in {_PERF_F_SQL}
+          and be.sd_element in {_PERF_E_SQL}
+          and be.sd_event_type in {_EVENTS_SQL}
         group by all
     )
     , dates as (
@@ -335,10 +358,9 @@ def load_competitors(_session, ew: str, days: int, account_categories: tuple[str
           , count(distinct be.user_id)             as users_interacting
         from base_events be
         where be.sd_product_section = 'Competitors'
-          and be.sd_feature in ('CompetitorsFilters', 'CompetitorsList', 'ShowTopCompetitorsButton')
-          and be.sd_element in ('TableSort', 'RadiusSelector', 'SearchOverlapSelector',
-                                'FranchiseTypeSelector', 'ViewStats', 'ShowTopCompetitorsButton')
-          and be.sd_event_type in ('Click', 'Change')
+          and be.sd_feature in {_COMP_F_SQL}
+          and be.sd_element in {_COMP_E_SQL}
+          and be.sd_event_type in {_EVENTS_SQL}
     )
     select
         t.total_dealers
@@ -370,10 +392,9 @@ def load_competitors(_session, ew: str, days: int, account_categories: tuple[str
           , count(distinct be.user_id) as users_interacting
         from base_events be
         where be.sd_product_section = 'Competitors'
-          and be.sd_feature in ('CompetitorsFilters', 'CompetitorsList')
-          and be.sd_element in ('TableSort', 'RadiusSelector', 'SearchOverlapSelector',
-                                'FranchiseTypeSelector', 'ViewStats')
-          and be.sd_event_type in ('Click', 'Change')
+          and be.sd_feature in {_COMP_F_SQL}
+          and be.sd_element in {_COMP_E_SQL}
+          and be.sd_event_type in {_EVENTS_SQL}
         group by all
     )
     , dates as (
@@ -418,10 +439,9 @@ def load_feature_breakdown(_session, ew: str, days: int, account_categories: tup
           , count(distinct be.user_id)             as users_interacting
         from base_events be
         where be.sd_product_section = 'Performance'
-          and be.sd_feature in ('QuickActions', 'PerformanceNavigation')
-          and be.sd_element in ('PricingRecommendation', 'SourcingRecommendation',
-                                'MerchandisingRecommendation', 'DealRatingLearnMore', 'LowVDPsLearnMore')
-          and be.sd_event_type in ('Click', 'Change')
+          and be.sd_feature in {_PERF_F_SQL}
+          and be.sd_element in {_PERF_E_SQL}
+          and be.sd_event_type in {_EVENTS_SQL}
         group by all
     )
     , competitors_interactions_by_element as (
@@ -438,12 +458,9 @@ def load_feature_breakdown(_session, ew: str, days: int, account_categories: tup
           , count(distinct be.user_id)             as users_interacting
         from base_events be
         where be.sd_product_section = 'Competitors'
-          and be.sd_feature in ('CompetitorsFilters', 'CompetitorsList',
-                                'ShowTopCompetitorsButton', 'ComparisonOverlay')
-          and be.sd_element in ('TableSort', 'RadiusSelector', 'SearchOverlapSelector',
-                                'FranchiseTypeSelector', 'ViewStats', 'ShowTopCompetitorsButton',
-                                'AttributeToggle')
-          and be.sd_event_type in ('Click', 'Change')
+          and be.sd_feature in {_COMP_F_SQL}
+          and be.sd_element in {_COMP_E_SQL}
+          and be.sd_event_type in {_EVENTS_SQL}
         group by all
     )
     select
@@ -493,17 +510,15 @@ def load_data_freshness(_session) -> pd.DataFrame:
 @st.cache_data(ttl=3600, show_spinner=False)
 def load_user_breakdown(_session, dealer_id: int, product_section: str, days: int, engagement_only: bool) -> pd.DataFrame:
     if product_section == "Performance":
-        interaction_filter = """
-          and be.sd_feature in ('QuickActions', 'PerformanceNavigation')
-          and be.sd_element in ('PricingRecommendation', 'SourcingRecommendation',
-                                'MerchandisingRecommendation', 'DealRatingLearnMore', 'LowVDPsLearnMore')
-          and be.sd_event_type in ('Click', 'Change')"""
+        interaction_filter = f"""
+          and be.sd_feature in {_PERF_F_SQL}
+          and be.sd_element in {_PERF_E_SQL}
+          and be.sd_event_type in {_EVENTS_SQL}"""
     else:
-        interaction_filter = """
-          and be.sd_feature in ('CompetitorsFilters', 'CompetitorsList', 'ShowTopCompetitorsButton')
-          and be.sd_element in ('TableSort', 'RadiusSelector', 'SearchOverlapSelector',
-                                'FranchiseTypeSelector', 'ViewStats', 'ShowTopCompetitorsButton')
-          and be.sd_event_type in ('Click', 'Change')"""
+        interaction_filter = f"""
+          and be.sd_feature in {_COMP_F_SQL}
+          and be.sd_element in {_COMP_E_SQL}
+          and be.sd_event_type in {_EVENTS_SQL}"""
 
     engagement_join = f"""
     inner join (
