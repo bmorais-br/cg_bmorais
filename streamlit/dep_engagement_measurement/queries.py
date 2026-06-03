@@ -240,7 +240,7 @@ def load_overview(_session, ew: str, days: int, account_categories: tuple[str, .
       , round(pv.users_viewing   / nullif(t.total_users,   0) * 100, 1) as users_viewing_pct
     from totals t
     inner join page_views pv on t._region_ = pv.region
-    order by pv.date desc
+    order by pv.date desc, pv.product asc
     """
 
     sql_period = f"""
