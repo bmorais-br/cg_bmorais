@@ -179,6 +179,7 @@ def common_ctes(ew: str, days: int, account_categories: list[str] | None = None,
           and tbl.sd_application = 'Dealer_Dashboard'
           and tbl.sd_product in ('Competitors', 'Performance')
           {"" if accept_staff else "and tbl.is_staff = false"}
+          and tbl.service_provider_id in (select service_provider_id from dealer_totals)
     )
     """
 
@@ -224,8 +225,7 @@ def load_overview(_session, ew: str, days: int, account_categories: tuple[str, .
           , count(distinct be.service_provider_id)        as dealers_viewing
           , count(distinct be.user_id)                    as users_viewing
         from base_events be
-        where
-          be.sd_product_section in ('Competitors', 'Performance')
+        where be.sd_product_section in ('Competitors', 'Performance')
           and be.source = 'cargurus_dealer_pageview_tracking'
         group by all
     )
