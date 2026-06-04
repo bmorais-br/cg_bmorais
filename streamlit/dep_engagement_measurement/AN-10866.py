@@ -28,7 +28,7 @@ st.set_page_config(
 with st.sidebar:
     st.title("⚙️ Filters")
     engagement_only = st.toggle(
-        "Engaged users only (last 180d)",
+        "Engaged users only (last 6 months)",
         value=True,
         help="When ON, denominators include only dealers/users who visited the Dealer Dashboard in the last 180 days.",
     )
