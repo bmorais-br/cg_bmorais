@@ -12,13 +12,15 @@ def normalize_cols(df: pd.DataFrame) -> pd.DataFrame:
 
 def trend_chart(df, y_col, color_col, title, color_map):
     df = df.copy()
-    df["DATE"] = pd.to_datetime(df["DATE"]).dt.strftime("%b %d")
+    df["DATE"] = pd.to_datetime(df["DATE"])
+    df = df.sort_values("DATE")
+    df["DATE"] = df["DATE"].dt.strftime("%b %d")
     return (
         alt.Chart(df)
         .mark_line(point=alt.OverlayMarkDef(filled=True, size=60), strokeWidth=2.5)
         .encode(
-            x=alt.X("DATE:O", title="Date", axis=alt.Axis(labelAngle=-45)),
-            y=alt.Y(f"{y_col}:Q", title="% of Total", scale=alt.Scale(domain=[0, 100]), axis=alt.Axis(values=[0,25,50,75,100])),
+            x=alt.X("DATE:O", title="Date", sort=None, axis=alt.Axis(labelAngle=-45)),
+            y=alt.Y(f"{y_col}:Q", title="% of Total", scale=alt.Scale(domainMin=0)),
             color=alt.Color(
                 f"{color_col}:N",
                 scale=alt.Scale(domain=list(color_map.keys()), range=list(color_map.values())),
