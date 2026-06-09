@@ -501,7 +501,10 @@ def load_active_rates(_session, ew: str, days: int, account_categories: tuple[st
             date           as session_date
           , service_provider_id
         from analytics.traffic.dealer_dashboard_daily_stats
-        where dealer_page in ('Competitors', 'Performance')
+        where
+          dealer_page in ('Competitors', 'Performance')
+          and dealer_product in ('Competitors', 'Performance')
+          and (events is not null and events >= 1)
           and is_staff = false
           and is_bot   = false
           and country  = 'US'
