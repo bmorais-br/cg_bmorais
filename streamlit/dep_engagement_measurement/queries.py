@@ -493,6 +493,60 @@ def load_feature_breakdown(_session, ew: str, days: int, account_categories: tup
 
 
 @st.cache_data(ttl=3600, show_spinner=False)
+def load_active_rates(_session, ew: str, days: int, account_categories: tuple[str, ...] = (), accept_staff: bool = True, ddi_only: bool = False, dealer_sizes: tuple[str, ...] = ()) -> pd.DataFrame:
+    sql = f"""
+    with {common_ctes(ew, days, list(account_categories), accept_staff, ddi_only, list(dealer_sizes))}
+    , base_stats as (
+        select
+            date           as session_date
+          , service_provider_id
+        from analytics.traffic.dealer_dashboard_daily_stats
+        where dealer_page in ('Competitors', 'Performance')
+          and is_staff = false
+          and is_bot   = false
+          and country  = 'US'
+          and service_provider_id in (select service_provider_id from dealer_totals)
+    )
+    , dau as (
+        select avg(cnt) as avg_cnt
+        from (
+            select session_date, count(distinct service_provider_id) as cnt
+            from base_stats
+            where session_date >= current_date() - {days}
+            group by session_date
+        )
+    )
+    , wau as (
+        select avg(cnt) as avg_cnt
+        from (
+            select date_trunc(week, session_date) as wk, count(distinct service_provider_id) as cnt
+            from base_stats
+            where session_date >= date_trunc(week, current_date() - {days})
+            group by wk
+        )
+    )
+    , mau as (
+        select avg(cnt) as avg_cnt
+        from (
+            select date_trunc(month, session_date) as mo, count(distinct service_provider_id) as cnt
+            from base_stats
+            where session_date >= date_trunc(month, current_date() - {days})
+            group by mo
+        )
+    )
+    select
+        round(dau.avg_cnt / nullif(t.total_dealers, 0) * 100, 1) as dau_pct
+      , round(wau.avg_cnt / nullif(t.total_dealers, 0) * 100, 1) as wau_pct
+      , round(mau.avg_cnt / nullif(t.total_dealers, 0) * 100, 1) as mau_pct
+    from totals t
+    cross join dau
+    cross join wau
+    cross join mau
+    """
+    return _session.sql(sql).to_pandas()
+
+
+@st.cache_data(ttl=3600, show_spinner=False)
 def load_data_freshness(_session) -> pd.DataFrame:
     sql = """
     select
