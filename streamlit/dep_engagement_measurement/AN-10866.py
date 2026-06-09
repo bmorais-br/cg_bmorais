@@ -134,44 +134,40 @@ with tab_overview:
     kpi_perf = df_overview_kpi[df_overview_kpi["PRODUCT"] == "Performance"]
     total_d = int(kpi_comp["TOTAL_DEALERS"].iloc[0]) if not kpi_comp.empty else 0
     total_u = int(kpi_comp["TOTAL_USERS"].iloc[0])   if not kpi_comp.empty else 0
-
-    c1, c2, c3, c4, c5, c6 = st.columns(6)
-    c1.metric("Total Eligible Dealers", f"{total_d:,}")
-    c2.metric("Total Eligible Users",   f"{total_u:,}")
-    c3.metric(
-        "Dealers Viewing · Competitors",
-        f"{kpi_comp['DEALERS_VIEWING_PCT'].iloc[0]:.1f}%" if not kpi_comp.empty else "—",
-    )
-    c4.metric(
-        "Users Viewing · Competitors",
-        f"{kpi_comp['USERS_VIEWING_PCT'].iloc[0]:.1f}%" if not kpi_comp.empty else "—",
-    )
-    c5.metric(
-        "Dealers Viewing · Performance",
-        f"{kpi_perf['DEALERS_VIEWING_PCT'].iloc[0]:.1f}%" if not kpi_perf.empty else "—",
-    )
-    c6.metric(
-        "Users Viewing · Performance",
-        f"{kpi_perf['USERS_VIEWING_PCT'].iloc[0]:.1f}%" if not kpi_perf.empty else "—",
-    )
-
     ar = df_active_rates.iloc[0] if not df_active_rates.empty else None
-    c7, c8, c9 = st.columns(3)
-    c7.metric(
-        f"DAU Rate (avg daily active dealers · {period_label.lower()})",
-        f"{ar['DAU_PCT']:.1f}%" if ar is not None else "—",
-        help="Average daily unique dealers visiting Competitors or Performance, divided by total eligible dealers.",
-    )
-    c8.metric(
-        f"WAU Rate (avg weekly active dealers · {period_label.lower()})",
-        f"{ar['WAU_PCT']:.1f}%" if ar is not None else "—",
-        help="Average weekly unique dealers visiting Competitors or Performance, divided by total eligible dealers.",
-    )
-    c9.metric(
-        f"MAU Rate (avg monthly active dealers · {period_label.lower()})",
-        f"{ar['MAU_PCT']:.1f}%" if ar is not None else "—",
-        help="Average monthly unique dealers visiting Competitors or Performance, divided by total eligible dealers.",
-    )
+
+    row0_left, row0_right = st.columns(2)
+
+    with row0_left:
+        with st.container(border=True):
+            st.caption("Eligibility")
+            m1, m2 = st.columns(2)
+            m1.metric("Dealers", f"{total_d:,}")
+            m2.metric("Users",   f"{total_u:,}")
+
+    with row0_right:
+        with st.container(border=True):
+            st.caption(f"Dealer Activity Rates · {period_label}")
+            m1, m2, m3 = st.columns(3)
+            m1.metric("DAU", f"{ar['DAU_PCT']:.1f}%" if ar is not None else "—", help="Average daily active dealers: (unique_dealers/total_elgible_dealers)")
+            m2.metric("WAU", f"{ar['WAU_PCT']:.1f}%" if ar is not None else "—", help="Average weekly active dealers: (unique_dealers/total_elgible_dealers)")
+            m3.metric("MAU", f"{ar['MAU_PCT']:.1f}%" if ar is not None else "—", help="Average monthly active dealers: (unique_dealers/total_elgible_dealers)")
+
+    row1_left, row1_right = st.columns(2)
+
+    with row1_left:
+        with st.container(border=True):
+            st.caption(f"Competitive Landscape · {period_label}")
+            m1, m2 = st.columns(2)
+            m1.metric("Dealers Viewing", f"{kpi_comp['DEALERS_VIEWING_PCT'].iloc[0]:.1f}%" if not kpi_comp.empty else "—")
+            m2.metric("Users Viewing",   f"{kpi_comp['USERS_VIEWING_PCT'].iloc[0]:.1f}%"   if not kpi_comp.empty else "—")
+
+    with row1_right:
+        with st.container(border=True):
+            st.caption(f"Performance · {period_label}")
+            m1, m2 = st.columns(2)
+            m1.metric("Dealers Viewing", f"{kpi_perf['DEALERS_VIEWING_PCT'].iloc[0]:.1f}%" if not kpi_perf.empty else "—")
+            m2.metric("Users Viewing",   f"{kpi_perf['USERS_VIEWING_PCT'].iloc[0]:.1f}%"   if not kpi_perf.empty else "—")
 
     st.divider()
     col1, col2 = st.columns(2)
@@ -199,19 +195,20 @@ with tab_performance:
     st.header("Performance · VIN-specific Insights Interaction")
 
     kp = df_perf_kpi.iloc[0] if not df_perf_kpi.empty else None
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Total Eligible Dealers", f"{int(kp['TOTAL_DEALERS']):,}" if kp is not None else "—")
-    c2.metric("Total Eligible Users",   f"{int(kp['TOTAL_USERS']):,}"   if kp is not None else "—")
-    c3.metric(
-        f"Dealers Interacting · {period_label.lower()}",
-        f"{kp['DEALERS_INTERACTING_PCT']:.1f}%" if kp is not None else "—",
-    )
-    c4.metric(
-        f"Users Interacting · {period_label.lower()}",
-        f"{kp['USERS_INTERACTING_PCT']:.1f}%" if kp is not None else "—",
-    )
+    with st.container(border=True):
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("Total Eligible Dealers", f"{int(kp['TOTAL_DEALERS']):,}" if kp is not None else "—")
+        c2.metric("Total Eligible Users",   f"{int(kp['TOTAL_USERS']):,}"   if kp is not None else "—")
+        c3.metric(
+            f"Dealers Interacting · {period_label.lower()}",
+            f"{kp['DEALERS_INTERACTING_PCT']:.1f}%" if kp is not None else "—",
+        )
+        c4.metric(
+            f"Users Interacting · {period_label.lower()}",
+            f"{kp['USERS_INTERACTING_PCT']:.1f}%" if kp is not None else "—",
+        )
 
-    st.divider()
+#    st.divider()
     st.subheader(f"Dealer breakdown · {period_label.lower()}")
     dealer_table(
         df_perf_dealer.rename(columns={
@@ -250,19 +247,20 @@ with tab_competitors:
     st.header("Competitive Landscape · Filter & List Interaction")
 
     kc = df_comp_kpi.iloc[0] if not df_comp_kpi.empty else None
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Total Eligible Dealers", f"{int(kc['TOTAL_DEALERS']):,}" if kc is not None else "—")
-    c2.metric("Total Eligible Users",   f"{int(kc['TOTAL_USERS']):,}"   if kc is not None else "—")
-    c3.metric(
-        f"Dealers Interacting · {period_label.lower()}",
-        f"{kc['DEALERS_INTERACTING_PCT']:.1f}%" if kc is not None else "—",
-    )
-    c4.metric(
-        f"Users Interacting · {period_label.lower()}",
-        f"{kc['USERS_INTERACTING_PCT']:.1f}%" if kc is not None else "—",
-    )
+    with st.container(border=True):
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("Total Eligible Dealers", f"{int(kc['TOTAL_DEALERS']):,}" if kc is not None else "—")
+        c2.metric("Total Eligible Users",   f"{int(kc['TOTAL_USERS']):,}"   if kc is not None else "—")
+        c3.metric(
+            f"Dealers Interacting · {period_label.lower()}",
+            f"{kc['DEALERS_INTERACTING_PCT']:.1f}%" if kc is not None else "—",
+        )
+        c4.metric(
+            f"Users Interacting · {period_label.lower()}",
+            f"{kc['USERS_INTERACTING_PCT']:.1f}%" if kc is not None else "—",
+        )
 
-    st.divider()
+#    st.divider()
     st.subheader(f"Dealer breakdown · {period_label.lower()}")
     dealer_table(
         df_comp_dealer.rename(columns={
