@@ -10,6 +10,7 @@ from queries import (
     load_performance,
     load_competitors,
     load_feature_breakdown,
+    load_active_rates,
     load_data_freshness,
 )
 from components import normalize_cols, trend_chart, dealer_table
@@ -85,6 +86,7 @@ with st.spinner("Loading data…"):
     df_perf_dealer, df_perf_kpi = [normalize_cols(d) for d in load_performance(session, engagement_where, days, cat_tuple, ACCEPT_STAFF, ddi_filter_active, dealer_size_tuple)]
     df_comp_dealer, df_comp_kpi = [normalize_cols(d) for d in load_competitors(session, engagement_where, days, cat_tuple, ACCEPT_STAFF, ddi_filter_active, dealer_size_tuple)]
     df_feature_breakdown                     = normalize_cols(load_feature_breakdown(session, engagement_where, days, cat_tuple, ACCEPT_STAFF, ddi_filter_active, dealer_size_tuple))
+    df_active_rates                          = normalize_cols(load_active_rates(session, engagement_where, days, cat_tuple, ACCEPT_STAFF, ddi_filter_active, dealer_size_tuple))
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Tabs
@@ -151,6 +153,24 @@ with tab_overview:
     c6.metric(
         "Users Viewing · Performance",
         f"{kpi_perf['USERS_VIEWING_PCT'].iloc[0]:.1f}%" if not kpi_perf.empty else "—",
+    )
+
+    ar = df_active_rates.iloc[0] if not df_active_rates.empty else None
+    c7, c8, c9 = st.columns(3)
+    c7.metric(
+        f"DAU Rate (avg daily active dealers · {period_label.lower()})",
+        f"{ar['DAU_PCT']:.1f}%" if ar is not None else "—",
+        help="Average daily unique dealers visiting Competitors or Performance, divided by total eligible dealers.",
+    )
+    c8.metric(
+        f"WAU Rate (avg weekly active dealers · {period_label.lower()})",
+        f"{ar['WAU_PCT']:.1f}%" if ar is not None else "—",
+        help="Average weekly unique dealers visiting Competitors or Performance, divided by total eligible dealers.",
+    )
+    c9.metric(
+        f"MAU Rate (avg monthly active dealers · {period_label.lower()})",
+        f"{ar['MAU_PCT']:.1f}%" if ar is not None else "—",
+        help="Average monthly unique dealers visiting Competitors or Performance, divided by total eligible dealers.",
     )
 
     st.divider()
