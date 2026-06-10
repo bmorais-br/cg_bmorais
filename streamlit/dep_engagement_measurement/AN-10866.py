@@ -12,6 +12,8 @@ from queries import (
     load_feature_breakdown,
     load_active_rates,
     load_data_freshness,
+    load_return_rate,
+    load_adoption_rate,
 )
 from components import normalize_cols, trend_chart, dealer_table
 
@@ -87,12 +89,14 @@ with st.spinner("Loading data…"):
     df_comp_dealer, df_comp_kpi = [normalize_cols(d) for d in load_competitors(session, engagement_where, days, cat_tuple, ACCEPT_STAFF, ddi_filter_active, dealer_size_tuple)]
     df_feature_breakdown                     = normalize_cols(load_feature_breakdown(session, engagement_where, days, cat_tuple, ACCEPT_STAFF, ddi_filter_active, dealer_size_tuple))
     df_active_rates                          = normalize_cols(load_active_rates(session, engagement_where, days, cat_tuple, ACCEPT_STAFF, ddi_filter_active, dealer_size_tuple))
+    df_return_kpi, df_return_dealer          = [normalize_cols(d) for d in load_return_rate(session, engagement_where, days, cat_tuple, ACCEPT_STAFF, ddi_filter_active, dealer_size_tuple)]
+    df_adoption                              = normalize_cols(load_adoption_rate(session, engagement_where, days, cat_tuple, ACCEPT_STAFF, ddi_filter_active, dealer_size_tuple))
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Tabs
 # ─────────────────────────────────────────────────────────────────────────────
-tab_overview, tab_performance, tab_competitors = st.tabs(
-    ["📈 Overview", "🚗 Performance", "🏁 Competitive Landscape"]
+tab_overview, tab_adoption, tab_performance, tab_competitors = st.tabs(
+    ["📈 Overview", "🌱 Adoption Insights",  "🚗 Performance", "🏁 Competitive Landscape"]
 )
 
 def to_et(val):
@@ -149,9 +153,9 @@ with tab_overview:
         with st.container(border=True):
             st.caption(f"Dealer Activity Rates · {period_label}")
             m1, m2, m3 = st.columns(3)
-            m1.metric("DAU", f"{ar['DAU_PCT']:.1f}%" if ar is not None else "—", help="Average daily active dealers: (unique_dealers/total_elgible_dealers)")
-            m2.metric("WAU", f"{ar['WAU_PCT']:.1f}%" if ar is not None else "—", help="Average weekly active dealers: (unique_dealers/total_elgible_dealers)")
-            m3.metric("MAU", f"{ar['MAU_PCT']:.1f}%" if ar is not None else "—", help="Average monthly active dealers: (unique_dealers/total_elgible_dealers)")
+            m1.metric("Daily Active Dealers", f"{ar['DAU_PCT']:.1f}%" if ar is not None else "—", help="Average daily active dealers: (unique_dealers/total_elgible_dealers)")
+            m2.metric("Weekly Active Dealers", f"{ar['WAU_PCT']:.1f}%" if ar is not None else "—", help="Average weekly active dealers: (unique_dealers/total_elgible_dealers)")
+            m3.metric("Monthly Active Dealers", f"{ar['MAU_PCT']:.1f}%" if ar is not None else "—", help="Average monthly active dealers: (unique_dealers/total_elgible_dealers)")
 
     row1_left, row1_right = st.columns(2)
 
@@ -189,6 +193,59 @@ with tab_overview:
     with st.expander("Raw data"):
         st.dataframe(df_overview, use_container_width=True, hide_index=True)
 
+# ── Adoption Insights ─────────────────────────────────────────────────────────
+with tab_adoption:
+    st.header("Adoption Insights")
+
+    # ── 30-day Adoption Rate ──────────────────────────────────────────────────
+    st.subheader("30-day Adoption Rate")
+    st.caption(f"% of eligible dealers who accessed Competitive Insights or Performance within 30 days of product launch (2026-05-21). Target: ≥ 40%.")
+
+    ka = df_adoption.iloc[0] if not df_adoption.empty else None
+    with st.container(border=True):
+#        c1, c2, c3 = st.columns(3)
+        c1, c2 = st.columns(2)
+        c1.metric("Total Eligible Dealers", f"{int(ka['TOTAL_ELIGIBLE_DEALERS']):,}" if ka is not None else "—")
+#        c2.metric("Dealers Accessed",       f"{int(ka['DEALERS_ACCESSED']):,}"       if ka is not None else "—")
+        c2.metric(
+            "Adoption Rate",
+            f"{ka['ADOPTION_PCT']:.1f}%"  if ka is not None else "—",
+            help="% of eligible dealers who made at least one page view within 30 days of the launch date.",
+        )
+
+    st.divider()
+
+    # ── 30-day Return Rate ────────────────────────────────────────────────────
+    st.subheader(f"30-day Return Rate · {period_label}")
+    st.caption("First-time users whose first visit falls within the selected period. A 'return' is any page view on a different day within 30 days of that first visit.")
+
+    kr = df_return_kpi.iloc[0] if not df_return_kpi.empty else None
+    with st.container(border=True):
+        c1, c2 = st.columns(2)
+        c1.metric(
+            "User Return Rate",
+            f"{kr['USER_RETURN_PCT']:.1f}%"   if kr is not None else "—",
+            help="% of first-time users who returned at least once within 30 days of their first visit.",
+        )
+        c2.metric(
+            "Dealer Return Rate",
+            f"{kr['DEALER_RETURN_PCT']:.1f}%"  if kr is not None else "—",
+            help="% of dealers that had at least one first-time user return within 30 days.",
+        )
+
+    with st.expander("Dealer breakdown"):
+        dealer_table(
+            df_return_dealer.rename(columns={
+                "DEALER_ID":        "Dealer ID",
+                "DEALER_NAME":      "Dealer Name",
+                "ACCOUNT_CATEGORY": "Account Category",
+                "DEALER_SIZE":      "Dealer Size",
+                "FIRST_TIME_USERS": "First-time Users",
+                "RETURNERS":        "Returners",
+                "RETURN_RATE_PCT":  "Return Rate %",
+            }),
+            pct_cols=["Return Rate %"],
+        )
 
 # ── Performance ───────────────────────────────────────────────────────────────
 with tab_performance:

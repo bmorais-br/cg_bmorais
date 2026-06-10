@@ -103,7 +103,9 @@ def common_ctes(ew: str, days: int, account_categories: list[str] | None = None,
           , current_account_category_simplified
           , split_part(current_account_category, '-', 2) as dealer_size
         from analytics.competitive_intelligence.performance_health_metric_comparison_monthly
-        where inventory_date = (
+        where
+            country_code = 'US'
+            and inventory_date = (
             select max(inventory_date)
             from analytics.competitive_intelligence.performance_health_metric_comparison_monthly
         )
@@ -544,6 +546,148 @@ def load_active_rates(_session, ew: str, days: int, account_categories: tuple[st
     cross join dau
     cross join wau
     cross join mau
+    """
+    return _session.sql(sql).to_pandas()
+
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def load_return_rate(_session, ew: str, days: int, account_categories: tuple[str, ...] = (), accept_staff: bool = True, ddi_only: bool = False, dealer_sizes: tuple[str, ...] = ()) -> tuple[pd.DataFrame, pd.DataFrame]:
+    _shared_ctes = f"""
+    first_visits as (
+        -- All-time first page view per (user, dealer) — no date upper bound so we get true first visit.
+        select
+            service_provider_id
+          , user_id
+          , min(derived_tstamp::date) as first_visit_date
+        from analytics.traffic.dealer_dashboard_events_normalized
+        where region = 'NA'
+          and sd_application = 'Dealer_Dashboard'
+          and sd_product in ('Competitors', 'Performance')
+          and sd_product_section in ('Competitors', 'Performance')
+          -- every session starts with a page view
+          and source = 'cargurus_dealer_pageview_tracking'
+          and is_staff = false
+          and is_bot   = false
+          and service_provider_id in (select service_provider_id from dealer_totals)
+        group by all
+    )
+    , cohort as (
+        -- First-timers whose first visit falls within the selected lookback window.
+        select *
+        from first_visits
+        where first_visit_date between current_date() - {days} and current_date()
+    )
+    , returners as (
+        -- Users who made at least one page view strictly after their first visit and within 30 days of it.
+        select distinct
+            e.service_provider_id
+          , e.user_id
+        from analytics.traffic.dealer_dashboard_events_normalized e
+        inner join cohort c
+            on  c.user_id             = e.user_id
+            and c.service_provider_id = e.service_provider_id
+        where e.region = 'NA'
+          and e.sd_application = 'Dealer_Dashboard'
+          and e.sd_product in ('Competitors', 'Performance')
+          and e.sd_product_section in ('Competitors', 'Performance')
+          -- every session starts with a page view
+          and e.source = 'cargurus_dealer_pageview_tracking'
+          and e.is_staff = false
+          and e.is_bot   = false
+          and e.derived_tstamp::date >  c.first_visit_date
+          and e.derived_tstamp::date <= c.first_visit_date + 30
+    )
+    , cohort_with_flag as (
+        select
+            c.service_provider_id
+          , c.user_id
+          , r.user_id is not null as is_returner
+        from cohort c
+        left join returners r
+            on  r.service_provider_id = c.service_provider_id
+            and r.user_id             = c.user_id
+    )"""
+
+    sql_summary = f"""
+    with {common_ctes(ew, days, list(account_categories), accept_staff, ddi_only, list(dealer_sizes))}
+    , {_shared_ctes}
+    , dealer_rollup as (
+        select
+            service_provider_id
+          , count(distinct user_id)                                     as first_time_users
+          , count(distinct case when is_returner then user_id end)      as returners
+        from cohort_with_flag
+        group by all
+    )
+    select
+        sum(first_time_users)                                                        as first_time_users
+      , sum(returners)                                                               as returners
+      , round(sum(returners) / nullif(sum(first_time_users), 0) * 100, 1)           as user_return_pct
+      , count(service_provider_id)                                                   as dealers_with_first_timers
+      , count(case when returners > 0 then service_provider_id end)                 as dealers_with_returners
+      , round(
+            count(case when returners > 0 then service_provider_id end)
+            / nullif(count(service_provider_id), 0) * 100, 1
+        )                                                                            as dealer_return_pct
+    from dealer_rollup
+    """
+
+    sql_dealer = f"""
+    with {common_ctes(ew, days, list(account_categories), accept_staff, ddi_only, list(dealer_sizes))}
+    , {_shared_ctes}
+    select
+        cwf.service_provider_id                                                      as dealer_id
+      , dt.current_dealer_name                                                       as dealer_name
+      , dt.current_account_category_simplified                                       as account_category
+      , dt.dealer_size                                                               as dealer_size
+      , count(distinct cwf.user_id)                                                  as first_time_users
+      , count(distinct case when cwf.is_returner then cwf.user_id end)               as returners
+      , round(
+            count(distinct case when cwf.is_returner then cwf.user_id end)
+            / nullif(count(distinct cwf.user_id), 0) * 100, 1
+        )                                                                            as return_rate_pct
+    from cohort_with_flag cwf
+    inner join dealer_totals dt on dt.service_provider_id = cwf.service_provider_id
+    group by all
+    order by return_rate_pct desc nulls last
+    """
+
+    return _session.sql(sql_summary).to_pandas(), _session.sql(sql_dealer).to_pandas()
+
+
+LAUNCH_DATE = '2026-05-21'
+
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def load_adoption_rate(_session, ew: str, days: int, account_categories: tuple[str, ...] = (), accept_staff: bool = True, ddi_only: bool = False, dealer_sizes: tuple[str, ...] = ()) -> pd.DataFrame:
+    sql = f"""
+    with {common_ctes(ew, days, list(account_categories), accept_staff, ddi_only, list(dealer_sizes))}
+    , dealers_accessed as (
+        -- Dealers who made at least one page view within 30 days of the launch date.
+        select distinct service_provider_id
+        from analytics.traffic.dealer_dashboard_events_normalized
+        where region = 'NA'
+          and sd_application = 'Dealer_Dashboard'
+          and sd_product_section in ('Competitors', 'Performance')
+          -- every session starts with a page view
+          and source = 'cargurus_dealer_pageview_tracking'
+          and is_staff = false
+          and is_bot   = false
+          -- TODO: once Sheba confirms, replace this hardcoded launch date with a dealer | granted_access_date
+          -- relation so the 30-day window is anchored per-dealer rather than globally.
+          and derived_tstamp::date <= dateadd(day, 30, '{LAUNCH_DATE}'::date)
+          and service_provider_id in (select service_provider_id from dealer_totals)
+    )
+    select
+        t.total_dealers                                                                  as total_eligible_dealers
+      , count(distinct da.service_provider_id)                                           as dealers_accessed
+      , round(
+            count(distinct da.service_provider_id)
+            / nullif(t.total_dealers, 0) * 100, 1
+        )                                                                                as adoption_pct
+    from totals t
+    left join dealers_accessed da on 1 = 1
+    group by t.total_dealers
     """
     return _session.sql(sql).to_pandas()
 
