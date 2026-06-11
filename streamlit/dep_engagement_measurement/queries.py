@@ -93,6 +93,7 @@ def common_ctes(ew: str, days: int, account_categories: list[str] | None = None,
         where derived_tstamp >= current_date() - 180
           and sd_application = 'Dealer_Dashboard'
           and is_staff = false
+          and is_bot = false
         group by all
     ){ddi_cte}
     , dealer_metadata as (
@@ -688,6 +689,71 @@ def load_adoption_rate(_session, ew: str, days: int, account_categories: tuple[s
     from totals t
     left join dealers_accessed da on 1 = 1
     group by t.total_dealers
+    """
+    return _session.sql(sql).to_pandas()
+
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def load_cross_page_rate(_session, ew: str, days: int, account_categories: tuple[str, ...] = (), accept_staff: bool = True, ddi_only: bool = False, dealer_sizes: tuple[str, ...] = ()) -> pd.DataFrame:
+    sql = f"""
+    with {common_ctes(ew, days, list(account_categories), accept_staff, ddi_only, list(dealer_sizes))}
+    , first_tab_visit as (
+        -- Earliest page view per (user, dealer) within the selected window — captures which tab they started on.
+        select
+            service_provider_id
+          , user_id
+          , derived_tstamp::date as first_visit_date
+          , sd_product_section   as first_tab
+        from analytics.traffic.dealer_dashboard_events_normalized
+        where region = 'NA'
+          and sd_application = 'Dealer_Dashboard'
+          and sd_product in ('Competitors', 'Performance')
+          and sd_product_section in ('Competitors', 'Performance')
+          -- every session starts with a page view
+          and source = 'cargurus_dealer_pageview_tracking'
+          and is_staff = false
+          and is_bot   = false
+          and derived_tstamp >= current_date() - {days}
+          and service_provider_id in (select service_provider_id from dealer_totals)
+        qualify row_number() over (partition by service_provider_id, user_id order by derived_tstamp) = 1
+    )
+    , cross_tab_users as (
+        -- Users who visited the opposite tab within 30 days of their first visit.
+        select distinct
+            ftv.service_provider_id
+          , ftv.user_id
+        from first_tab_visit ftv
+        inner join analytics.traffic.dealer_dashboard_events_normalized e
+            on  e.service_provider_id = ftv.service_provider_id
+            and e.user_id             = ftv.user_id
+        where e.region = 'NA'
+          and e.sd_application = 'Dealer_Dashboard'
+          and e.sd_product in ('Competitors', 'Performance')
+          and e.sd_product_section in ('Competitors', 'Performance')
+          and e.sd_product_section != ftv.first_tab
+          -- every session starts with a page view
+          and e.source = 'cargurus_dealer_pageview_tracking'
+          and e.is_staff = false
+          and e.is_bot   = false
+          and e.derived_tstamp::date >= ftv.first_visit_date
+          and e.derived_tstamp::date <= ftv.first_visit_date + 30
+    )
+    , dealer_rollup as (
+        select
+            ftv.service_provider_id
+          , count(distinct ftv.user_id)   as active_users
+          , count(distinct ctu.user_id)   as cross_tab_users
+        from first_tab_visit ftv
+        left join cross_tab_users ctu
+            on  ctu.service_provider_id = ftv.service_provider_id
+            and ctu.user_id             = ftv.user_id
+        group by all
+    )
+    select
+        sum(active_users)                                                                 as active_users
+      , sum(cross_tab_users)                                                              as cross_tab_users
+      , round(sum(cross_tab_users) / nullif(sum(active_users), 0) * 100, 1)              as cross_page_rate_pct
+    from dealer_rollup
     """
     return _session.sql(sql).to_pandas()
 

@@ -14,6 +14,7 @@ from queries import (
     load_data_freshness,
     load_return_rate,
     load_adoption_rate,
+    load_cross_page_rate,
 )
 from components import normalize_cols, trend_chart, dealer_table
 
@@ -91,6 +92,7 @@ with st.spinner("Loading data…"):
     df_active_rates                          = normalize_cols(load_active_rates(session, engagement_where, days, cat_tuple, ACCEPT_STAFF, ddi_filter_active, dealer_size_tuple))
     df_return_kpi, df_return_dealer          = [normalize_cols(d) for d in load_return_rate(session, engagement_where, days, cat_tuple, ACCEPT_STAFF, ddi_filter_active, dealer_size_tuple)]
     df_adoption                              = normalize_cols(load_adoption_rate(session, engagement_where, days, cat_tuple, ACCEPT_STAFF, ddi_filter_active, dealer_size_tuple))
+    df_cross_page                            = normalize_cols(load_cross_page_rate(session, engagement_where, days, cat_tuple, ACCEPT_STAFF, ddi_filter_active, dealer_size_tuple))
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Tabs
@@ -245,6 +247,23 @@ with tab_adoption:
                 "RETURN_RATE_PCT":  "Return Rate %",
             }),
             pct_cols=["Return Rate %"],
+        )
+
+    st.divider()
+
+    # ── Cross-page Usage Rate ─────────────────────────────────────────────────
+    st.subheader(f"Cross-page Usage Rate · {period_label}")
+    st.caption("% of active users who engaged with both Performance and Competitive Landscape within 30 days of their first visit in the selected period. Target: ≥ 50%.")
+
+    kx = df_cross_page.iloc[0] if not df_cross_page.empty else None
+    with st.container(border=True):
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Active Users",      f"{int(kx['ACTIVE_USERS']):,}"    if kx is not None else "—")
+        c2.metric("Cross-page Users",  f"{int(kx['CROSS_TAB_USERS']):,}" if kx is not None else "—")
+        c3.metric(
+            "Cross-page Rate",
+            f"{kx['CROSS_PAGE_RATE_PCT']:.1f}%"                          if kx is not None else "—",
+            help="% of active users who visited both Performance and Competitive Landscape within 30 days of their first visit.",
         )
 
 # ── Performance ───────────────────────────────────────────────────────────────
