@@ -4,6 +4,11 @@ from snowflake.snowpark.context import get_active_session
 
 from config import DEALER_LIST
 
+# Original beta group at launch (2026-05-21). Used only for adoption-rate calculations
+# because the live DEALER_LIST has grown since launch and we need the cohort that was
+# present when the 30-day adoption window started.
+ORIGINAL_BETA_DEALER_LIST = "337667,279723,414813,83363,283470,66205,297439,55490,297177,287317,59349,58736,57180,58650,54077,54534,282549,291629,335671,367058,63842,66456,60421,282352,287086,66446,63840,55378,67362,273996,58711,287087,58223,304494,64657,412815,289297,53811,279634,433241,368892,459744,284835,431377,447168,279879,276171,377067,101337,50415,54098,289989,63494,275253,306754,61442,276248,84329,379256,311039,54295,282140,54554,290383,49920,283972,408480,49888,49876,114130,59980,287183,297590,275971,281789,458694,63707,334007,400283,275282,275285,342616,370399,380000,334305,277660,303618,443635,67710,59061,382378,312994,273827,310521,413115,325533,452465,340136,67590,283096,306576,334514,367132,66184,336961,68061,284188,443402,66064,277332,291060,50190,67659,407794,407791,65557,344517,53877,306780"
+
 
 def _sql_in_list(values: list[str]) -> str:
     """Return a SQL IN-list literal, e.g. ('foo', 'bar').
@@ -41,7 +46,7 @@ _COMP_E_SQL = _sql_in_list(list(COMP_INTERACTION_ELEMENTS))
 _EVENTS_SQL = _sql_in_list(list(INTERACTION_EVENT_TYPES))
 
 
-def common_ctes(ew: str, days: int, account_categories: list[str] | None = None, accept_staff: bool = False, ddi_only: bool = True, dealer_sizes: list[str] | None = None) -> str:
+def common_ctes(ew: str, days: int, account_categories: list[str] | None = None, accept_staff: bool = False, ddi_only: bool = True, dealer_sizes: list[str] | None = None, dealer_list_override: str | None = None) -> str:
     """Build the shared WITH-clause CTEs used by every dashboard query.
 
     Parameters
@@ -59,6 +64,8 @@ def common_ctes(ew: str, days: int, account_categories: list[str] | None = None,
         When True, joins against DDI subscriptions so only DDI-enrolled dealers appear.
     dealer_sizes : list[str] | None
         If provided, restrict totals/dealer_totals to these dealer sizes.
+    dealer_list_override : str | None
+        If provided, use this comma-separated dealer ID string instead of DEALER_LIST.
     """
     cat_filter = (
         f"and current_account_category_simplified in {_sql_in_list(account_categories)}"
@@ -131,7 +138,7 @@ def common_ctes(ew: str, days: int, account_categories: list[str] | None = None,
         where pr.enabled = 1
           and pr.role_name = 'ROLE_DD_ADMIN'
           and sp._region_ = 'NA'
-          and sp.location_id in ({DEALER_LIST})
+          and sp.location_id in ({dealer_list_override if dealer_list_override is not None else DEALER_LIST})
         qualify row_number() over (partition by sp.location_id, s.user_uuid order by pr.id) = 1
     )
     , user_engagement_flags as (
@@ -510,6 +517,8 @@ def load_active_rates(_session, ew: str, days: int, account_categories: tuple[st
           and is_staff = false
           and is_bot   = false
           and country  = 'US'
+          and events is not null
+          and events > 0
           and service_provider_id in (select service_provider_id from dealer_totals)
     )
     , dau as (
@@ -662,7 +671,7 @@ LAUNCH_DATE = '2026-05-21'
 @st.cache_data(ttl=3600, show_spinner=False)
 def load_adoption_rate(_session, ew: str, days: int, account_categories: tuple[str, ...] = (), accept_staff: bool = True, ddi_only: bool = False, dealer_sizes: tuple[str, ...] = ()) -> pd.DataFrame:
     sql = f"""
-    with {common_ctes(ew, days, list(account_categories), accept_staff, ddi_only, list(dealer_sizes))}
+    with {common_ctes(ew, days, list(account_categories), accept_staff, ddi_only, list(dealer_sizes), ORIGINAL_BETA_DEALER_LIST)}
     , dealers_accessed as (
         -- Dealers who made at least one page view within 30 days of the launch date.
         select distinct service_provider_id
