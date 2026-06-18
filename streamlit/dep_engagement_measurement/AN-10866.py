@@ -202,17 +202,21 @@ with tab_adoption:
     # ── 30-day Adoption Rate ──────────────────────────────────────────────────
     st.subheader("30-day Adoption Rate")
     st.caption(f"% of eligible dealers who accessed Competitive Insights or Performance within 30 days of product launch (2026-05-21). Target: ≥ 40%.")
-
     ka = df_adoption.iloc[0] if not df_adoption.empty else None
     with st.container(border=True):
 #        c1, c2, c3 = st.columns(3)
         c1, c2 = st.columns(2)
-        c1.metric("Total Eligible Dealers", f"{int(ka['TOTAL_ELIGIBLE_DEALERS']):,}" if ka is not None else "—")
+        c1.metric(
+            "Total Eligible Dealers",
+            f"{int(ka['TOTAL_ELIGIBLE_DEALERS']):,}" if ka is not None else "—",
+            help="Count from the original 119-dealer beta cohort at launch — differs from the dealer count shown in the rest of the dashboard.",
+        )
+
 #        c2.metric("Dealers Accessed",       f"{int(ka['DEALERS_ACCESSED']):,}"       if ka is not None else "—")
         c2.metric(
             "Adoption Rate",
             f"{ka['ADOPTION_PCT']:.1f}%"  if ka is not None else "—",
-            help="% of eligible dealers who made at least one page view within 30 days of the launch date.",
+            help="% of the original beta cohort (119 dealers) who made at least one page view within 30 days of the launch date.",
         )
 
     st.divider()
