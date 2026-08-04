@@ -69,21 +69,14 @@ with first_ci_views as (
         -- Null values mean that the car was sold before the view date
         , sum(case when pre_max is not null and post_max is not null then 1 else 0 end) as listings
         /*
-            For each buck (pre or post CI view) we're checking whether the listing had a price change
+            For each window (pre or post CI view) we're checking whether the listing had a price change
             The threshold is set to $0.50 to consider an actual price change
             [pre/post]_max - [pre/post]_min > 0.5 -----> True, price changed. False otherwise
         */
         , sum(case when pre_max  is not null and post_max is not null and pre_max  - pre_min  > 0.5 then 1 else 0 end) as changed_pre
         , sum(case when pre_max  is not null and post_max is not null and post_max - post_min > 0.5 then 1 else 0 end) as changed_post
-        , round(100.0 * sum(case when pre_max  is not null and post_max is not null
-                  and pre_max  - pre_min  > 0.5 then 1 else 0 end)
-            / nullif(sum(case when pre_max is not null and post_max is not null
-                  then 1 else 0 end), 0), 1) as pct_pre
-
-        , round(100.0 * sum(case when pre_max  is not null and post_max is not null
-                  and post_max - post_min > 0.5 then 1 else 0 end)
-            / nullif(sum(case when pre_max is not null and post_max is not null
-                  then 1 else 0 end), 0), 1) as pct_post
+        , round(100 * changed_pre/nullif(listings, 0), 1) as pct_pre 
+        , round(100 * changed_post/nullif(listings, 0), 1) as pct_post
     from listing_windows
     group by 1
 )
