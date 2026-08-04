@@ -3,11 +3,7 @@ import pandas as pd
 from snowflake.snowpark.context import get_active_session
 
 from config import DEALER_LIST
-
-# Original beta group at launch (2026-05-21). Used only for adoption-rate calculations
-# because the live DEALER_LIST has grown since launch and we need the cohort that was
-# present when the 30-day adoption window started.
-ORIGINAL_BETA_DEALER_LIST = "337667,279723,414813,83363,283470,66205,297439,55490,297177,287317,59349,58736,57180,58650,54077,54534,282549,291629,335671,367058,63842,66456,60421,282352,287086,66446,63840,55378,67362,273996,58711,287087,58223,304494,64657,412815,289297,53811,279634,433241,368892,459744,284835,431377,447168,279879,276171,377067,101337,50415,54098,289989,63494,275253,306754,61442,276248,84329,379256,311039,54295,282140,54554,290383,49920,283972,408480,49888,49876,114130,59980,287183,297590,275971,281789,458694,63707,334007,400283,275282,275285,342616,370399,380000,334305,277660,303618,443635,67710,59061,382378,312994,273827,310521,413115,325533,452465,340136,67590,283096,306576,334514,367132,66184,336961,68061,284188,443402,66064,277332,291060,50190,67659,407794,407791,65557,344517,53877,306780"
+from dealers import DEALER_DATES
 
 
 def _sql_in_list(values: list[str]) -> str:
@@ -665,28 +661,30 @@ def load_return_rate(_session, ew: str, days: int, account_categories: tuple[str
     return _session.sql(sql_summary).to_pandas(), _session.sql(sql_dealer).to_pandas()
 
 
-LAUNCH_DATE = '2026-05-21'
-
-
 @st.cache_data(ttl=3600, show_spinner=False)
 def load_adoption_rate(_session, ew: str, days: int, account_categories: tuple[str, ...] = (), accept_staff: bool = True, ddi_only: bool = False, dealer_sizes: tuple[str, ...] = ()) -> pd.DataFrame:
+    dealer_start_values = ", ".join(
+        f"({spid}, '{start}'::date)" for spid, start in DEALER_DATES.items()
+    )
     sql = f"""
-    with {common_ctes(ew, days, list(account_categories), accept_staff, ddi_only, list(dealer_sizes), ORIGINAL_BETA_DEALER_LIST)}
+    with {common_ctes(ew, days, list(account_categories), accept_staff, ddi_only, list(dealer_sizes))}
+    , dealer_start_dates as (
+        select column1 as service_provider_id, column2 as start_date
+        from values {dealer_start_values}
+    )
     , dealers_accessed as (
-        -- Dealers who made at least one page view within 30 days of the launch date.
-        select distinct service_provider_id
-        from analytics.traffic.dealer_dashboard_events_normalized
-        where region = 'NA'
-          and sd_application = 'Dealer_Dashboard'
-          and sd_product_section in ('Competitors', 'Performance')
-          -- every session starts with a page view
-          and source = 'cargurus_dealer_pageview_tracking'
-          and is_staff = false
-          and is_bot   = false
-          -- TODO: once Sheba confirms, replace this hardcoded launch date with a dealer | granted_access_date
-          -- relation so the 30-day window is anchored per-dealer rather than globally.
-          and derived_tstamp::date <= dateadd(day, 30, '{LAUNCH_DATE}'::date)
-          and service_provider_id in (select service_provider_id from dealer_totals)
+        -- Dealers who made at least one page view within 30 days of their individual start date.
+        select distinct e.service_provider_id
+        from analytics.traffic.dealer_dashboard_events_normalized e
+        inner join dealer_start_dates dsd on dsd.service_provider_id = e.service_provider_id
+        where e.region = 'NA'
+          and e.sd_application = 'Dealer_Dashboard'
+          and e.sd_product_section in ('Competitors', 'Performance')
+          and e.source = 'cargurus_dealer_pageview_tracking'
+          and e.is_staff = false
+          and e.is_bot   = false
+          and e.derived_tstamp::date between dsd.start_date and dateadd(day, 30, dsd.start_date)
+          and e.service_provider_id in (select service_provider_id from dealer_totals)
     )
     select
         t.total_dealers                                                                  as total_eligible_dealers
