@@ -7,6 +7,14 @@
   Design: within-dealer pre/post (14 days each side of first CI view date)
   Clean cohort: dealers with first_view_date <= current_date - 14 (necessary to grab complete post-window)
   Listing change threshold: |max_price - min_price| > $0.50 within each window
+
+  Responsiveness metric (days_to_first_reprice_post):
+    For each dealer, the number of days between first_view_date and the earliest
+    day any of their listings registered a post-window reprice event (day-over-day
+    delta > $0.50). Measured as datediff(first_view_date, earliest_reprice_date)
+    so a reprice on day +1 shows as 1. NULL for dealers with no post-window
+    reprice; NULLs are excluded from the summary median, so that figure reflects
+    only dealers who actually repriced.
 */
 
 with
@@ -105,6 +113,7 @@ dealer_metadata as (
     select
         service_provider_id
       , inventory_listing_id
+      , snapshot_date
       , window_label
       , price_shown_on_site
       , lag(price_shown_on_site) over (
@@ -145,6 +154,20 @@ dealer_metadata as (
     group by 1
 )
 
+, dealer_first_reprice as (
+    -- Earliest post-window reprice day per dealer; NULL if none.
+    -- Days measured from first_view_date so day +1 = 1.
+    select
+        ptr.service_provider_id
+      , datediff('day', fv.first_view_date, min(ptr.snapshot_date)) as days_to_first_reprice_post
+    from price_transitions_raw ptr
+    inner join first_ci_views fv on fv.service_provider_id = ptr.service_provider_id
+    where ptr.window_label = 'post'
+      and ptr.prev_price   is not null
+      and abs(ptr.price_shown_on_site - ptr.prev_price) > 0.5
+    group by ptr.service_provider_id, fv.first_view_date
+)
+
 , dealer_pp as (
     -- Binary repricing metric: did a listing's price move at all within each window?
     select
@@ -182,10 +205,12 @@ dealer_metadata as (
       , dre.total_reprice_events_pre
       , dre.total_reprice_events_post
       , round((dre.total_reprice_events_post - dre.total_reprice_events_pre) / nullif(dre.total_reprice_events_pre, 0) * 100, 1) as pct_lift_reprice_events
+      , dfr.days_to_first_reprice_post
     from first_ci_views fv
     left join dealer_pp             dp  on dp.service_provider_id  = fv.service_provider_id
     left join dealer_metadata       dm  on dm.service_provider_id  = fv.service_provider_id
     left join dealer_reprice_events dre on dre.service_provider_id = fv.service_provider_id
+    left join dealer_first_reprice  dfr on dfr.service_provider_id = fv.service_provider_id
 )
 
 , summary as (
@@ -214,6 +239,7 @@ dealer_metadata as (
             (sum(total_reprice_events_post) - sum(total_reprice_events_pre))
             / nullif(sum(total_reprice_events_pre), 0) * 100
         , 1)                                                                      as pct_lift_reprice_events
+      , median(days_to_first_reprice_post)                                        as median_days_to_first_reprice_post
     from dealer_level_results
     group by 1, 2
 )
