@@ -39,8 +39,9 @@ dealer_metadata as (
         sd_application          = 'Dealer_Dashboard'
         and sd_product          = 'Performance'
         and sd_product_section  = 'Performance'
-        and source              = 'cargurus_dealer_pageview_tracking'
-        -- Comment two lines below if this is not enough/important
+        -- Restricting the dealer cohort to those that clicked the
+        -- MerchandisingRecommendation QuickAction. It is reasonable for the proxy
+        -- "they saw the gap and engaged with it". Data is likely thin, but useful
         and sd_feature          = 'QuickActions'
         and sd_element          = 'MerchandisingRecommendation'
         and is_staff            = false
