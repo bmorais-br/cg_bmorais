@@ -14,10 +14,10 @@
     Competitive gap = dealer metric - competitor metric (positive = dealer ahead for leads/vdps;
     negative = dealer ahead for days on lot).
 
-  Delta interpretation:
-    - Absolute lift:  post - pre on dealer's own metric
+  Delta interpretation (post - pre) / pre * 100:
+    - Pct lift:   % change in dealer's own metric post vs pre
       (positive = improvement for leads/vdps; negative = improvement for days on lot)
-    - Gap delta:      post gap - pre gap
+    - Gap pct lift: % change in competitive gap, denominator = abs(pre gap) to handle negative baselines
       (positive = gap widened in dealer's favor for leads/vdps; negative = improved for days on lot)
 */
 
@@ -44,7 +44,6 @@ dealer_metadata as (
       and sd_product         in ('Performance', 'Competitors')
       and sd_product_section in ('Performance', 'Competitors')
       and source             = 'cargurus_dealer_pageview_tracking'
-      -- Comment two lines below to broaden cohort to all Performance tab viewers
       and is_staff           = false
       and is_bot             = false
       and region             = 'NA'
@@ -115,23 +114,23 @@ dealer_metadata as (
       -- Absolute performance
       , round(pw.avg_leads_per_unit_pre,   2) as avg_leads_per_unit_pre
       , round(pw.avg_leads_per_unit_post,  2) as avg_leads_per_unit_post
-      , round(pw.avg_leads_per_unit_post  - pw.avg_leads_per_unit_pre,  2) as delta_leads_per_unit
+      , round((pw.avg_leads_per_unit_post  - pw.avg_leads_per_unit_pre)  / nullif(pw.avg_leads_per_unit_pre,  0) * 100, 1) as pct_lift_leads_per_unit
       , round(pw.avg_vdps_per_unit_pre,    2) as avg_vdps_per_unit_pre
       , round(pw.avg_vdps_per_unit_post,   2) as avg_vdps_per_unit_post
-      , round(pw.avg_vdps_per_unit_post   - pw.avg_vdps_per_unit_pre,   2) as delta_vdps_per_unit
+      , round((pw.avg_vdps_per_unit_post   - pw.avg_vdps_per_unit_pre)   / nullif(pw.avg_vdps_per_unit_pre,   0) * 100, 1) as pct_lift_vdps_per_unit
       , round(pw.avg_days_on_lot_pre,      1) as avg_days_on_lot_pre
       , round(pw.avg_days_on_lot_post,     1) as avg_days_on_lot_post
-      , round(pw.avg_days_on_lot_post     - pw.avg_days_on_lot_pre,     1) as delta_days_on_lot
+      , round((pw.avg_days_on_lot_post     - pw.avg_days_on_lot_pre)     / nullif(pw.avg_days_on_lot_pre,     0) * 100, 1) as pct_lift_days_on_lot
       -- Competitive gap
       , round(pw.avg_leads_per_unit_gap_pre,   2) as avg_leads_per_unit_gap_pre
       , round(pw.avg_leads_per_unit_gap_post,  2) as avg_leads_per_unit_gap_post
-      , round(pw.avg_leads_per_unit_gap_post  - pw.avg_leads_per_unit_gap_pre,  2) as delta_leads_per_unit_gap
+      , round((pw.avg_leads_per_unit_gap_post  - pw.avg_leads_per_unit_gap_pre)  / nullif(abs(pw.avg_leads_per_unit_gap_pre),  0) * 100, 1) as pct_lift_leads_per_unit_gap
       , round(pw.avg_vdps_per_unit_gap_pre,    2) as avg_vdps_per_unit_gap_pre
       , round(pw.avg_vdps_per_unit_gap_post,   2) as avg_vdps_per_unit_gap_post
-      , round(pw.avg_vdps_per_unit_gap_post   - pw.avg_vdps_per_unit_gap_pre,   2) as delta_vdps_per_unit_gap
+      , round((pw.avg_vdps_per_unit_gap_post   - pw.avg_vdps_per_unit_gap_pre)   / nullif(abs(pw.avg_vdps_per_unit_gap_pre),   0) * 100, 1) as pct_lift_vdps_per_unit_gap
       , round(pw.avg_days_on_lot_gap_pre,      1) as avg_days_on_lot_gap_pre
       , round(pw.avg_days_on_lot_gap_post,     1) as avg_days_on_lot_gap_post
-      , round(pw.avg_days_on_lot_gap_post     - pw.avg_days_on_lot_gap_pre,     1) as delta_days_on_lot_gap
+      , round((pw.avg_days_on_lot_gap_post     - pw.avg_days_on_lot_gap_pre)     / nullif(abs(pw.avg_days_on_lot_gap_pre),     0) * 100, 1) as pct_lift_days_on_lot_gap
     from first_ci_performance_views fv
     left join dealer_performance_windows pw on pw.service_provider_id = fv.service_provider_id
     left join dealer_metadata            dm on dm.service_provider_id  = fv.service_provider_id
@@ -143,20 +142,20 @@ dealer_metadata as (
       , dealer_size
       , count(distinct service_provider_id)                        as total_dealers
       -- Leads per unit
-      , round(avg(delta_leads_per_unit),           2)               as avg_delta_leads_per_unit
-      , round(median(delta_leads_per_unit),        2)               as median_delta_leads_per_unit
-      , round(avg(delta_leads_per_unit_gap),       2)               as avg_delta_leads_per_unit_gap
-      , round(median(delta_leads_per_unit_gap),    2)               as median_delta_leads_per_unit_gap
+      , round(avg(pct_lift_leads_per_unit),           1)            as avg_pct_lift_leads_per_unit
+      , round(median(pct_lift_leads_per_unit),        1)            as median_pct_lift_leads_per_unit
+      , round(avg(pct_lift_leads_per_unit_gap),       1)            as avg_pct_lift_leads_per_unit_gap
+      , round(median(pct_lift_leads_per_unit_gap),    1)            as median_pct_lift_leads_per_unit_gap
       -- VDPs per unit
-      , round(avg(delta_vdps_per_unit),            2)               as avg_delta_vdps_per_unit
-      , round(median(delta_vdps_per_unit),         2)               as median_delta_vdps_per_unit
-      , round(avg(delta_vdps_per_unit_gap),        2)               as avg_delta_vdps_per_unit_gap
-      , round(median(delta_vdps_per_unit_gap),     2)               as median_delta_vdps_per_unit_gap
+      , round(avg(pct_lift_vdps_per_unit),            1)            as avg_pct_lift_vdps_per_unit
+      , round(median(pct_lift_vdps_per_unit),         1)            as median_pct_lift_vdps_per_unit
+      , round(avg(pct_lift_vdps_per_unit_gap),        1)            as avg_pct_lift_vdps_per_unit_gap
+      , round(median(pct_lift_vdps_per_unit_gap),     1)            as median_pct_lift_vdps_per_unit_gap
       -- Days on lot
-      , round(avg(delta_days_on_lot),              1)               as avg_delta_days_on_lot
-      , round(median(delta_days_on_lot),           1)               as median_delta_days_on_lot
-      , round(avg(delta_days_on_lot_gap),          1)               as avg_delta_days_on_lot_gap
-      , round(median(delta_days_on_lot_gap),       1)               as median_delta_days_on_lot_gap
+      , round(avg(pct_lift_days_on_lot),              1)            as avg_pct_lift_days_on_lot
+      , round(median(pct_lift_days_on_lot),           1)            as median_pct_lift_days_on_lot
+      , round(avg(pct_lift_days_on_lot_gap),          1)            as avg_pct_lift_days_on_lot_gap
+      , round(median(pct_lift_days_on_lot_gap),       1)            as median_pct_lift_days_on_lot_gap
     from dealer_level_results
     group by 1, 2
 )
