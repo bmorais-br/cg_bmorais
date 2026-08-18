@@ -106,12 +106,12 @@ def common_ctes(ew: str, days: int, account_categories: list[str] | None = None,
           , current_dealer_name
           , current_account_category_simplified
           , split_part(current_account_category, '-', 2) as dealer_size
-        from analytics.competitive_intelligence.performance_health_metric_comparison_monthly
+        from analytics.unified_dealer_data_mart.performance_health_metric_comparison_monthly
         where
             country_code = 'US'
             and inventory_date = (
             select max(inventory_date)
-            from analytics.competitive_intelligence.performance_health_metric_comparison_monthly
+            from analytics.unified_dealer_data_mart.performance_health_metric_comparison_monthly
         )
     )
     , dealers_and_users as (
@@ -194,12 +194,12 @@ def common_ctes(ew: str, days: int, account_categories: list[str] | None = None,
 def load_account_categories(_session) -> list[str]:
     sql = """
     select distinct current_account_category_simplified
-    from analytics.competitive_intelligence.performance_health_metric_comparison_monthly
+    from analytics.unified_dealer_data_mart.performance_health_metric_comparison_monthly
     where country_code = 'US'
       and current_account_category_simplified is not null
       and inventory_date = (
           select max(inventory_date)
-          from analytics.competitive_intelligence.performance_health_metric_comparison_monthly
+          from analytics.unified_dealer_data_mart.performance_health_metric_comparison_monthly
           where country_code = 'US'
       )
     order by 1
@@ -211,7 +211,7 @@ def load_account_categories(_session) -> list[str]:
 def load_dealer_sizes(_session) -> list[str]:
     sql = """
     select distinct split_part(current_account_category, '-', 2) as dealer_size
-    from analytics.competitive_intelligence.performance_health_metric_comparison_monthly
+    from analytics.unified_dealer_data_mart.performance_health_metric_comparison_monthly
     where current_account_category is not null
       and split_part(current_account_category, '-', 2) != ''
     order by 1
