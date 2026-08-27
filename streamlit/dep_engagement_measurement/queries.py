@@ -26,10 +26,24 @@ PERF_INTERACTION_ELEMENTS = (
     'MerchandisingRecommendation', 'DealRatingLearnMore', 'LowVDPsLearnMore',
 )
 
-COMP_INTERACTION_FEATURES = ('CompetitorsFilters', 'CompetitorsList', 'InsightsBanner', 'ComparisonOverlay')
+COMP_INTERACTION_FEATURES = (
+    'CompetitorsFilters', 'CompetitorsList', 'InsightsBanner', 'ComparisonOverlay',
+    'CompLandscapeTabSwitched', 'DiscoverBannerCtaClicked', 'DiscoverMapMetricToggled',
+    'DiscoverScoringMethodologyClicked', 'DiscoverFilterChanged', 'DiscoverListColumnSorted',
+    'DiscoverListRowClicked', 'DiscoverListSearchUsed', 'DiscoverListPaginationClicked',
+    'PerfDrawerOpened', 'PerfDrawerClosed', 'PerfDrawerSectionToggled',
+    'WatchlistSelection', 'WatchlistComparison',
+    'CompetitorsFiltersV2', 'CompetitorsListV2', 'InsightsBannerV2',
+)
 COMP_INTERACTION_ELEMENTS = (
     'TableSort', 'RadiusSelector', 'SearchOverlapSelector',
     'FranchiseTypeSelector', 'ViewStats', 'ShowTopCompetitorsButton', 'AttributeToggle',
+    'TabSwitch', 'WatchlistBannerCta', 'MetricToggle', 'ScoringMethodologyLink',
+    'FilterChange', 'ColumnSort', 'ListRow', 'SearchInput', 'PaginationControl',
+    'PerformanceDrawer', 'DrawerSection', 'AddCompetitorButton', 'RemoveCompetitorButton',
+    'ConfirmCta', 'EditWatchlistCta', 'MapMetricToggle', 'InsightShowMore', 'SectionToggle',
+    'RadiusSelectorV2', 'FranchiseTypeSelectorV2', 'SearchOverlapSelectorV2',
+    'TableSortV2', 'ViewStatsV2', 'ShowTopCompetitorsButtonV2', 'ToggleButtonV2',
 )
 
 INTERACTION_EVENT_TYPES = ('Click', 'Change')
