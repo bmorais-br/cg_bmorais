@@ -6,9 +6,8 @@
     - Performance:  ANALYTICS.UNIFIED_DEALER_DATA_MART.PERFORMANCE_HEALTH_METRIC_COMPARISONS
 
   Design: same pre/post window as price_change_after_ci_view.sql (14 days each side of first CI view).
-  Cohort restriction: dealers who were performing ≥10% below their competitor set on at least one of
-    leads/unit, VDPs/unit, or days on lot — measured as the average over the 14-day pre-window so the
-    benchmark is established before the CI view, not contaminated by post-view behavior.
+  Cohort restriction: dealers ≥10% below their competitor set on at least one of leads/unit,
+    VDPs/unit, or days on lot — measured over the 14-day pre-window.
 
   Below-benchmark thresholds (pre-window averages):
     - Leads/unit:   dealer_avg < competitor_avg * 0.90
@@ -18,12 +17,8 @@
   Listing change threshold: |max_price - min_price| > $0.50 within each window
 
   Responsiveness metric (days_to_first_reprice_post):
-    For each dealer, the number of days between first_view_date and the earliest
-    day any of their listings registered a post-window reprice event (day-over-day
-    delta > $0.50). Measured as datediff(first_view_date, earliest_reprice_date)
-    so a reprice on day +1 shows as 1. NULL for dealers with no post-window
-    reprice; NULLs are excluded from the summary median, so that figure reflects
-    only dealers who actually repriced.
+    Days from first_view_date to earliest post-window reprice event (delta > $0.50).
+    Day +1 = 1. NULL for dealers with no post-window reprice; excluded from summary median.
 */
 
 with
@@ -39,8 +34,6 @@ dealer_metadata as (
 )
 
 , first_ci_views as (
-    -- One row per dealer: their earliest DEP page view, excluding staff/bots.
-    -- Restricted to dealers with a complete 14-day post-window.
     select
         service_provider_id
       , min(derived_tstamp::date) as first_view_date
@@ -57,16 +50,15 @@ dealer_metadata as (
 )
 
 , below_benchmark_dealers as (
-    -- Dealers whose pre-window average performance was ≥10% below their competitor set
-    -- on at least one of: leads/unit, VDPs/unit, or days on lot.
+    -- Dealers whose pre-window average was ≥10% below competitors on at least one metric.
     select
         p.service_provider_id
-      , avg(p.total_leads_used_inventory     / nullif(p.total_used_inventory, 0))              as avg_leads_per_unit
-      , avg(p.total_vdp_views_used_inventory / nullif(p.total_used_inventory, 0))              as avg_vdps_per_unit
-      , avg(p.avg_days_on_lot_used_inventory)                                                   as avg_days_on_lot
-      , avg(p.competitor_total_leads_used_inventory    / nullif(p.competitor_total_used_inventory, 0)) as avg_comp_leads_per_unit
+      , avg(p.total_leads_used_inventory      / nullif(p.total_used_inventory, 0))              as avg_leads_per_unit
+      , avg(p.total_vdp_views_used_inventory  / nullif(p.total_used_inventory, 0))              as avg_vdps_per_unit
+      , avg(p.avg_days_on_lot_used_inventory)                                                    as avg_days_on_lot
+      , avg(p.competitor_total_leads_used_inventory     / nullif(p.competitor_total_used_inventory, 0)) as avg_comp_leads_per_unit
       , avg(p.competitor_total_vdp_views_used_inventory / nullif(p.competitor_total_used_inventory, 0)) as avg_comp_vdps_per_unit
-      , avg(p.competitor_avg_days_on_lot_used_inventory)                                        as avg_comp_days_on_lot
+      , avg(p.competitor_avg_days_on_lot_used_inventory)                                         as avg_comp_days_on_lot
     from analytics.unified_dealer_data_mart.performance_health_metric_comparisons p
     inner join first_ci_views fv on fv.service_provider_id = p.service_provider_id
     where p.inventory_date between dateadd('day', -14, fv.first_view_date)
@@ -81,9 +73,6 @@ dealer_metadata as (
 )
 
 , listing_windows as (
-    -- One row per (listing, dealer) with the observed price range in each 14-day window.
-    -- NULL pre_* or post_* means the listing had no snapshots in that window
-    -- (e.g. car was listed after the view date, or sold before it).
     select
         il.inventory_listing_id
       , il.service_provider_id
@@ -116,8 +105,6 @@ dealer_metadata as (
 )
 
 , price_snapshots_labeled as (
-    -- Raw daily snapshots tagged to their window (pre/post).
-    -- Partitioning LAG by window_label prevents cross-boundary transitions.
     select
         il.service_provider_id
       , il.inventory_listing_id
@@ -158,8 +145,6 @@ dealer_metadata as (
 )
 
 , listing_reprice_events as (
-    -- Count of day-over-day price transitions per listing per window.
-    -- A listing repriced 3 times in the post window contributes 3 to post_reprice_events.
     select
         service_provider_id
       , inventory_listing_id
@@ -172,8 +157,6 @@ dealer_metadata as (
 )
 
 , dealer_reprice_events as (
-    -- Dealer-level rollup of reprice events, restricted to eligible listings only
-    -- (those with observations in both windows, same denominator as dealer_pp).
     select
         lre.service_provider_id
       , sum(case when lw.pre_window_price_max is not null and lw.post_window_price_max is not null
@@ -188,8 +171,6 @@ dealer_metadata as (
 )
 
 , dealer_first_reprice as (
-    -- Earliest post-window reprice day per dealer; NULL if none.
-    -- Days measured from first_view_date so day +1 = 1.
     select
         ptr.service_provider_id
       , datediff('day', fv.first_view_date, min(ptr.snapshot_date)) as days_to_first_reprice_post
@@ -202,22 +183,21 @@ dealer_metadata as (
 )
 
 , dealer_pp as (
-    -- Binary repricing metric: did a listing's price move at all within each window?
     select
         service_provider_id
       , sum(case when pre_window_price_max is not null
                   and post_window_price_max is not null
-                 then 1 else 0 end)                                              as eligible_listings
+                 then 1 else 0 end)                                               as eligible_listings
       , sum(case when pre_window_price_max  is not null
                   and post_window_price_max is not null
                   and pre_window_price_max  - pre_window_price_min  > 0.5
-                 then 1 else 0 end)                                              as listings_repriced_pre
+                 then 1 else 0 end)                                               as listings_repriced_pre
       , sum(case when pre_window_price_max  is not null
                   and post_window_price_max is not null
                   and post_window_price_max - post_window_price_min > 0.5
-                 then 1 else 0 end)                                              as listings_repriced_post
-      , round(100.0 * listings_repriced_pre  / nullif(eligible_listings, 0), 1) as pct_repriced_pre
-      , round(100.0 * listings_repriced_post / nullif(eligible_listings, 0), 1) as pct_repriced_post
+                 then 1 else 0 end)                                               as listings_repriced_post
+      , round(100.0 * listings_repriced_pre  / nullif(eligible_listings, 0), 1)  as pct_repriced_pre
+      , round(100.0 * listings_repriced_post / nullif(eligible_listings, 0), 1)  as pct_repriced_post
     from listing_windows
     group by 1
 )
@@ -248,7 +228,6 @@ dealer_metadata as (
       , round((dre.total_reprice_events_post - dre.total_reprice_events_pre) / nullif(dre.total_reprice_events_pre, 0) * 100, 1) as pct_lift_reprice_events
       , dfr.days_to_first_reprice_post
     from first_ci_views fv
-    -- Restrict to below-benchmark dealers only
     inner join below_benchmark_dealers bb  on bb.service_provider_id  = fv.service_provider_id
     left join dealer_pp             dp     on dp.service_provider_id   = fv.service_provider_id
     left join dealer_metadata       dm     on dm.service_provider_id   = fv.service_provider_id
@@ -270,12 +249,10 @@ dealer_metadata as (
             / nullif(count(distinct service_provider_id), 0)
         , 1)                                                                        as pct_dealers_repriced_post
       , pct_dealers_repriced_post - pct_dealers_repriced_pre                        as pct_pt_lift_dealers_repriced
-      -- Binary: % of eligible listings with any price change in the window
       , round(avg(pct_repriced_pre),  1)                                            as avg_pct_listings_repriced_pre
       , round(avg(pct_repriced_post), 1)                                            as avg_pct_listings_repriced_post
       , round(avg(pct_pt_lift_listings_repriced),    1)                             as avg_pct_pt_lift_listings_repriced
       , round(median(pct_pt_lift_listings_repriced), 1)                             as median_pct_pt_lift_listings_repriced
-      -- Count: total reprice events and lift
       , sum(total_reprice_events_pre)                                               as total_reprice_events_pre
       , sum(total_reprice_events_post)                                              as total_reprice_events_post
       , round(
@@ -287,8 +264,6 @@ dealer_metadata as (
     group by 1, 2
 )
 
-select
-    *
-from summary
+select * from summary
 -- select * from dealer_level_results
 ;
