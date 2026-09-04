@@ -24,7 +24,7 @@
 
 with
 params as (
-    select 30 as window_days  -- change to 14, 30, or 60
+    select 14 as window_days  -- change to 14, 30, or 60
 )
 
 , dealer_metadata as (
@@ -300,8 +300,8 @@ params as (
 
 , summary as (
     select
-        first_viewed_tab
-      , engagement_quartile
+      engagement_quartile
+--      , first_viewed_tab
       , (select window_days from params)                                            as window_days
       , count(distinct service_provider_id)                                         as total_dealers
       , round(
@@ -329,9 +329,9 @@ params as (
       , round(median(pct_lift_vdps_per_unit_gap),    1)                              as median_pct_lift_vdps_per_unit_gap
       , median(days_to_first_reprice_post)                                           as median_days_to_first_reprice_post
     from dealer_level_results
-    group by 1, 2, 3
+    group by all
 )
 
-select * from summary order by first_viewed_tab, engagement_quartile
+select * from summary order by engagement_quartile
 -- select * from dealer_level_results
 ;
