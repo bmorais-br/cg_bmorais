@@ -1,140 +1,100 @@
-# CI Product Business Impact — Results Summary
+# CI Product Business Impact — Pricing Durability (14-Day vs 30-Day)
 
-**Prepared by:** Bruno Morais | **Date:** August 2026 | **Branch:** AN-11916
+**Prepared by:** Bruno Morais | **Date:** September 2026 | **Branch:** AN-11916
+**Sources:** `ci_tabs_post_action_durability.sql` (tab breakdown) and `quartiles_post_action_durability.sql` (engagement tiers, pooled) — run at window_days = 14 and 30.
+**Cohorts:** 14d: 84 dealers (50 Performance, 34 Competitors). 30d: 83 dealers (49 Performance, 34 Competitors).
+**Quartile design:** Engagement quartiles are computed across all CI users (both tabs pooled). Tab effects are captured separately via ci_tabs. This gives uniform n=21 per quartile cell vs n=7–14 in a Tab×Quartile split.
 
 ---
 
 ## KEY TAKEAWAYS
 
-1. **Dealers reprice within 2 days of their first CI view** — median days to first post-view reprice event is 2 days across every reliable segment and both the 14-day and 30-day windows. This is the most consistent signal in the data.
+1. **Performance inventory repricing is fully durable — zero decay from 14d to 30d.** Median ppt lift: +5.3 at 14d, +5.3 at 30d. This is the headline finding.
 
-2. **Q3 engagement drives the strongest repricing response** — Franchise Large Q3 dealers (n=9) show a +32.5% lift in total reprice events and a +19.3 ppt median lift in listing reprice rate at 14 days. Q1 is the weakest (Franchise Large Q1: +16.0% events). The dose-response is not perfectly monotonic — Q3 consistently outperforms Q4 in this cohort.
+2. **Competitors repricing is front-loaded and largely reverts.** Median ppt lift: +4.4 at 14d, +0.9 at 30d (−3.5 ppt decay). Event volume collapses −40.9 ppt. The initial burst doesn't hold.
 
-3. **Repricing behavior is durable to 30 days** — Franchise Large Performance-tab viewers at Q2 (n=9) show +17.4% reprice event lift at 30 days. Q3 Performance (n=6) shows +29.1%. The signal persists and in some cases strengthens for Performance-tab first viewers.
+3. **Q1 (least frequent users) shows the most durable inventory repricing across the full cohort.** +7.1 ppt at 14d, +6.2 ppt at 30d (Δ −0.9 ppt). Quiet users with no burst pattern make the most persistent adjustments.
 
-4. **Competitive gap improvement is strongest for Franchise Large Q3 Performance viewers on leads and VDPs** — at 14 days, this segment (n=6) shows median +26.9% leads/unit lift and +10.4% VDPs/unit lift. Days on lot increased by +10.3%, meaning vehicles took longer to sell — a deterioration on that metric.
+4. **Q4 (most frequent users) is second-best for durability.** +6.0 → +4.1 ppt (Δ −1.9 ppt). Event volume declines sharply (−36.4 ppt), but inventory adjustment holds, and the VDP competitive gap swings strongly positive at 30d (−10.0% → +9.5%).
 
-5. **Competitive gap signals fade at 30 days** — VDPs/unit improvement disappears across nearly all segments. Leads/unit partially holds for Q3 Performance (+21.9% median). The gap improvement seen at 14 days is not fully durable.
+5. **Q3 shows a pricing-vs-VDP divergence that warrants investigation.** Inventory repricing turns negative at 30d (−1.8 ppt, from +3.2 at 14d), yet the VDP competitive gap keeps improving (+25.6% → +38.6%). Do not present this as a pricing story — something else is driving competitive visibility gains.
 
-6. **Most Independent and Small dealer segments are too thin to conclude** — the majority of non-Franchise-Large segments have n < 6. Results for those groups are surfaced for completeness but should not be cited as findings.
+6. **Q2 is the only tier where both signals worsen.** Inventory: +2.7 → +1.7 ppt. VDP gap: 0.0% → −10.1%. These dealers made a partial pricing response that wasn't sustained, and are falling further behind competitively.
 
----
+7. **All engagement tiers front-load reprice events — this is universal.** Event volume declines from 14d to 30d across every quartile. The durable signal is inventory share (ppt lift), not event count. Use events only to characterize response speed and intensity, not persistence.
 
-## ANALYSIS 1 — Pricing Change After First CI View (14-Day Window)
-
-Franchise Large dealers reprice more after viewing CI. Q3 shows the strongest lift at +32.5% more reprice events. Median days to first reprice: 2 days across all segments.
-
-| Segment | Quartile | n | Listing Rate Pre | Listing Rate Post | Median Ppt Lift | Events Pre | Events Post | % Lift Events | Median Days |
-|---|---|---|---|---|---|---|---|---|---|
-| Franchise Large | Q1 | 17 | 63.0% | 69.7% | +7.1 | 1,737 | 2,015 | +16.0% | 2 |
-| Franchise Large | Q2 | 19 | 62.0% | 60.1% | +3.8 | 1,613 | 1,797 | +11.4% | 2 |
-| Franchise Large | Q3 | 9 | 60.1% | 76.6% | +19.3 | 891 | 1,181 | +32.5% | 2 |
-| Franchise Large | Q4 | 12 | 71.0% | 75.3% | −1.4 | 1,309 | 1,470 | +12.3% | 2 |
-| Franchise Small | Q1 | 3 ⚠ | 60.9% | 58.5% | +10.3 | 220 | 79 | −64.1% | 2 |
-| Franchise Small | Q3 | 6 ⚠ | 47.5% | 60.5% | +6.2 | 478 | 545 | +14.0% | 2 |
-| Franchise Small | Q4 | 4 ⚠ | 50.3% | 71.5% | +16.9 | 200 | 217 | +8.5% | 3 |
-| Independent Large | Q1 | 1 ⚠⚠ | 95.0% | 7.5% | −87.5 | 78 | 3 | −96.2% | 3 |
-| Independent Large | Q2 | 2 ⚠⚠ | 31.6% | 42.6% | +11.0 | 344 | 590 | +71.5% | 2.5 |
-| Independent Large | Q3 | 6 ⚠ | 68.2% | 63.1% | −3.1 | 1,606 | 1,527 | −4.9% | 2 |
-| Independent Large | Q4 | 5 ⚠ | 46.8% | 64.4% | +15.9 | 481 | 742 | +54.3% | 3 |
-
-⚠ n < 10, interpret with caution. ⚠⚠ n < 3, discard.
-
-**Findings:**
-- Franchise Large is the only segment with sufficient n. Q3 shows the strongest reprice event lift (+32.5%) and highest median listing reprice rate lift (+19.3 ppts). Q4 is positive but weaker (+12.3% events), suggesting moderate engagement drives more immediate pricing action than the highest engagement tier.
-- Q1 negative values for Franchise Small (−64.1%) and Independent Large (−96.2%) reflect dealers who viewed CI once and didn't return — likely regression to mean from an elevated pre-window baseline, not a CI-caused decline.
-- Median days to first reprice is 2 days across every reliable segment.
+8. **Performance VDPs/unit decline in absolute terms at 30d (−6.3%), but the competitive gap still improves (+4.9%).** Competitors are deteriorating faster than Performance dealers. This is a relative-position win, not an absolute growth story — important framing for the presentation.
 
 ---
 
-## ANALYSIS 2 — Pricing Change Durability (30-Day Window)
+## DURABILITY — Top Line (by Tab)
 
-Repricing lift persists to 30 days for Performance-tab first viewers. Median days to first reprice remains 2–3 days.
+> Most reliable rows. Cohorts are near-identical (one Performance dealer difference at 30d). Use these for the main durability argument. Always cite **median** for VDP metrics — see Avg vs Median section.
 
-| Segment | Quartile | First Tab | n | Listing Rate Pre | Listing Rate Post | Median Ppt Lift | Events Pre | Events Post | % Lift Events | Median Days |
-|---|---|---|---|---|---|---|---|---|---|---|
-| Franchise Large | Q1 | Performance | 12 | 76.3% | 78.1% | +3.5 | 2,715 | 2,906 | +7.0% | 2.5 |
-| Franchise Large | Q1 | Competitors | 5 ⚠ | 69.6% | 76.0% | +8.0 | 717 | 836 | +16.6% | 2 |
-| Franchise Large | Q2 | Performance | 9 ⚠ | 65.0% | 74.0% | +9.8 | 1,833 | 2,152 | +17.4% | 2 |
-| Franchise Large | Q2 | Competitors | 9 ⚠ | 74.8% | 66.6% | −8.9 | 1,212 | 1,045 | −13.8% | 3 |
-| Franchise Large | Q3 | Performance | 6 ⚠ | 70.8% | 82.4% | +15.9 | 1,066 | 1,376 | +29.1% | 2.5 |
-| Franchise Large | Q3 | Competitors | 3 ⚠⚠ | 80.6% | 85.7% | +4.9 | 660 | 700 | +6.1% | 2 |
-| Franchise Large | Q4 | Performance | 7 ⚠ | 76.8% | 81.6% | +2.1 | 1,025 | 1,005 | −2.0% | 3 |
-| Franchise Large | Q4 | Competitors | 5 ⚠ | 70.4% | 77.3% | −1.6 | 1,518 | 1,313 | −13.5% | 2 |
-| Franchise Small | Q1 | Performance | 2 ⚠⚠ | 51.7% | 45.8% | −5.9 | 338 | 88 | −74.0% | 3.5 |
-| Independent Large | Q1 | Competitors | 1 ⚠⚠ | 92.7% | 7.3% | −85.4 | 83 | 3 | −96.4% | 3 |
+| First Tab | n 14d / 30d | Median Inv Ppt 14d | Median Inv Ppt 30d | Δ | Events % 14d | Events % 30d | Δ | Median VDP % 14d | Median VDP % 30d | Median VDP Gap 14d | Median VDP Gap 30d | Δ Gap | Days |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| Performance | 50 / 49 | **+5.3** | **+5.3** | **0.0** | +4.4% | −3.7% | −8.1 ppt | +1.9% | −6.3% | +3.6% | +4.9% | +1.3 ppt | 3 |
+| Competitors | 34 / 34 | **+4.4** | **+0.9** | **−3.5** | +27.8% | −13.1% | −40.9 ppt | +9.3% | +1.1% | +6.0% | +8.5% | +2.5 ppt | 2 |
 
-⚠ n < 10, interpret with caution. ⚠⚠ n < 3, discard. All other segments omitted due to insufficient n.
+**Median Inv Ppt** = median per-dealer (pct_listings_repriced_post − pct_listings_repriced_pre). **Events %** = aggregate (post − pre) / pre. **Median VDP %** = median % change in dealer VDPs/used unit (absolute). **Median VDP Gap** = median % change in dealer-minus-competitor VDPs/unit; positive = dealer closed the gap. **Δ** = 30d minus 14d value.
 
-**Findings:**
-- Performance-tab first viewers show consistent durability: Q1 +7.0%, Q2 +17.4%, Q3 +29.1% at 30 days — comparable to 14-day results, suggesting repricing lift is not a novelty spike.
-- Competitors-tab first viewers at Q2 and Q4 show negative event lift at 30 days (−13.8%, −13.5%), while Performance viewers remain positive. Performance tab appears to be the more action-driving surface.
-- Q4 Performance turns slightly negative at 30 days (−2.0%), reversing from +12.3% at 14 days — possibly dealers who repriced heavily early and then normalized.
+> ⚠️ Performance dealers lose absolute VDP ground at 30d (−6.3%), but the competitive gap still improves (+4.9%). Competitors are declining even faster. Frame as a relative-position win.
 
 ---
 
-## ANALYSIS 3 — Competitive Gap After First CI View (14-Day Window)
+## DURABILITY — By Engagement Quartile (all CI users pooled)
 
-Franchise Large Q3 Performance viewers show improvement across all three competitive metrics at 14 days. All other segments are too small or too noisy to conclude.
+> Quartiles pool both tabs. Tab × Quartile interaction is not captured here — see Key Takeaway #1/#2 for the tab-level story. All cells n≥20; no small-sample warnings apply to inventory or events metrics. VDP gap still requires caution — see Avg vs Median section below.
 
-**Important:** Averages for gap metrics are heavily distorted by outliers (e.g., one cell avg = 1,283.4%; same cell median = −3.8%). All findings below cite medians.
+| Q | n 14d / 30d | Inv Ppt 14d | Inv Ppt 30d | Δ Inv | Events % 14d | Events % 30d | Δ Events | VDP Gap 14d | VDP Gap 30d | Δ VDP Gap | Days |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| Q1 | 21 / 21 | +7.1 | +6.2 | −0.9 | +4.2% | +1.7% | −2.5 ppt | +3.8% | −2.3% | −6.1 ppt | 2 |
+| Q2 | 21 / 21 | +2.7 | +1.7 | −1.0 | +16.3% | −2.0% | −18.3 ppt | 0.0% | −10.1% | −10.1 ppt | 2 |
+| Q3 | 21 / 21 | +3.2 | −1.8 | −5.0 | +10.4% | −14.3% | −24.7 ppt | +25.6% | +38.6% | +13.0 ppt | 2 |
+| Q4 | 21 / 20 * | +6.0 | +4.1 | −1.9 | +24.2% | −12.2% | −36.4 ppt | −10.0% | +9.5% | +19.5 ppt | 2 |
 
-| Segment | Quartile | First Tab | n | Median Leads/Unit Lift | Median VDPs/Unit Lift | Median DoL Lift | Signal |
-|---|---|---|---|---|---|---|---|
-| Franchise Large | Q1 | Performance | 11 | −3.4% | −5.1% | +1.2% | Flat/slight decline |
-| Franchise Large | Q1 | Competitors | 6 ⚠ | +14.7% | +16.9% | −0.1% | Positive leads/VDPs |
-| Franchise Large | Q2 | Performance | 10 | +7.0% | +6.1% | +2.0% | Moderate improvement |
-| Franchise Large | Q2 | Competitors | 9 ⚠ | −4.6% | −4.5% | −2.0% | Slight decline leads/VDPs; DoL improved |
-| Franchise Large | Q3 | Performance | 6 ⚠ | +26.9% | +10.4% | +10.3% | Strong leads/VDPs; DoL deteriorated (more days = slower sales) |
-| Franchise Large | Q3 | Competitors | 3 ⚠⚠ | −13.5% | +9.6% | −1.4% | Mixed |
-| Franchise Large | Q4 | Performance | 8 ⚠ | −17.5% | −7.9% | +4.5% | Negative leads/VDPs |
-| Franchise Large | Q4 | Competitors | 4 ⚠⚠ | −12.9% | −21.5% | +7.1% | Negative leads/VDPs |
-| Independent Large | Q3 | Performance | 3 ⚠⚠ | −13.7% | −5.5% | −4.2% | All negative |
-| Independent Large | Q4 | Competitors | 3 ⚠⚠ | +48.6% | +26.1% | +4.4% | Positive but very small n |
+\* One dealer dropped from Q4 at 30d (first_view_date too recent for a complete 30d post-window).
 
-DoL = Days on Lot. Positive lift = MORE days on lot = vehicles selling slower = worse. Negative lift = fewer days = vehicles selling faster = improvement.
-
-**Findings:**
-- Franchise Large Q3 Performance (n=6) shows the strongest positive signal on leads/unit (median +26.9%) and VDPs/unit (median +10.4%). However, days on lot increased by +10.3% — vehicles took longer to sell in the post-window, which is a deterioration. The competitive wins on leads and VDPs do not extend to inventory velocity for this segment.
-- Franchise Large Q1 Performance (n=11) shows flat to slightly negative results — least engaged dealers show no competitive gap improvement, mirroring the pricing analysis pattern.
-- Franchise Large Q4 Performance (n=8) shows negative leads/unit (−17.5%) and VDPs/unit (−7.9%) despite high engagement — Q4 dealers may be improving their own pricing aggressively while competitors keep pace or improve faster.
+**Cells with reliable VDP gap estimates (Δ Inv and Δ Events):** All cells at n=21/20 are reliable for inventory and events. VDP gap requires caution in Q3 (outlier inflation) and Q4 30d (extreme avg/median divergence). See table below.
 
 ---
 
-## ANALYSIS 4 — Competitive Gap Durability (30-Day Window)
+## AVERAGE vs MEDIAN DIVERGENCE — Do Not Cite Averages for VDP Gap
 
-At 30 days, competitive gap signals weaken and become inconsistent. Only Franchise Large Q3 Performance (n=6) partially holds. VDPs/unit improvement disappears across nearly all segments.
-
-| Segment | Quartile | First Tab | n | Median Leads/Unit Lift | Median VDPs/Unit Lift | Median DoL Lift |
-|---|---|---|---|---|---|---|
-| Franchise Large | Q1 | Performance | 12 | +5.6% | −12.9% | −1.8% |
-| Franchise Large | Q1 | Competitors | 5 ⚠ | +4.5% | −8.0% | −2.4% |
-| Franchise Large | Q2 | Performance | 9 ⚠ | +1.7% | −14.8% | +6.9% |
-| Franchise Large | Q2 | Competitors | 9 ⚠ | +2.0% | −10.5% | +3.1% |
-| Franchise Large | Q3 | Performance | 6 ⚠ | +21.9% | +3.2% | +11.5% |
-| Franchise Large | Q3 | Competitors | 3 ⚠⚠ | +1.9% | +1.8% | +0.9% |
-| Franchise Large | Q4 | Performance | 7 ⚠ | −13.1% | −4.6% | +14.2% |
-| Franchise Large | Q4 | Competitors | 5 ⚠ | −13.3% | −19.6% | +16.5% |
-| Independent Large | Q3 | Performance | 4 ⚠⚠ | −16.9% | −15.4% | +3.9% |
-
-⚠ n < 10. Extreme outlier values present in several small-n cells (3,624.9%, −1,335.4%); those rows excluded from this table.
-
-**Findings:**
-- VDPs/unit improvement fades at 30 days — nearly all segment medians turn negative. At 14 days VDPs/unit was the most consistent positive signal; at 30 days it is not. This suggests VDP engagement improvement is short-term.
-- Franchise Large Q3 Performance partially holds: leads/unit +21.9% (vs +26.9% at 14d), DoL +11.5% (vs +10.3%). Leads and days-on-lot signals are more durable than VDPs.
-- Q4 shows large positive DoL values at 30 days (+14.2%, +16.5%) — meaning MORE days on lot, a deterioration. Possibly a downstream effect of aggressive repricing driving buyers to competitors over a longer window.
+| Cell | Window | Avg VDP Gap | Median VDP Gap | Risk |
+|---|---|---|---|---|
+| Q1 | 14d | +14.4% | **+3.8%** | Moderate inflation; use median |
+| Q1 | 30d | +16.4% | **−2.3%** | Sign flip — average positive, median negative |
+| Q2 | 14d | +30.7% | **0.0%** | Large inflation; average misleadingly positive |
+| Q2 | 30d | −22.8% | **−10.1%** | Consistent direction; moderate divergence |
+| Q3 | 14d | +67.9% | **+25.6%** | Large inflation from outlier(s); cite median only |
+| Q3 | 30d | +64.8% | **+38.6%** | Same outlier persisting; cite median only |
+| Q4 | 14d | −44.4% | **−10.0%** | Consistent direction; cite median |
+| Q4 | 30d | −157.3% | **+9.5%** | Extreme sign flip — **never cite average** |
 
 ---
 
 ## CAVEATS
 
-- **Observational, not causal.** These analyses cannot establish that CI caused the behavioral changes. Dealers who seek out competitive data may be more proactive by default.
-- **Small cohort overall.** The CI product launched May 21, 2026. With ~83 days of data, cohort sizes are inherently limited.
-- **Segments with n < 10 are flagged throughout.** All cited findings are from segments with n ≥ 9. Single-dealer or two-dealer rows are visible in raw data but excluded from conclusions.
-- **Engagement quartiles are cohort-relative.** Q4 in the 14-day analysis does not represent the same session rate as Q4 in the 30-day analysis. Do not compare quartile labels across window sizes.
-- **Never cite averages for competitive gap metrics.** Use medians only. The leads/unit average for Franchise Large Q2 Performance (14d) is 1,283.4% — the median is −3.8%.
-- **30-day durability conclusions are directional only.** The tab split (Performance vs Competitors) reduces most segments below 10.
+- **Observational, not causal.** Dealers who seek out competitive data may be more proactive by default. No matched control group exists.
+- **All quartile cells are now n≥20.** Pooling across tabs eliminates the small-sample problem that affected the Tab×Quartile breakdown. Inventory repricing and events metrics are reliable for all cells.
+- **Quartile comparability across windows is valid.** Session rate denominator is `current_date()` (window-agnostic). The 14d and 30d cohorts differ by one dealer only (Q4 at 30d). Δ columns track the same dealer groups across both windows.
+- **Tab × Quartile interaction is not captured.** Whether, say, Q4 Competitors behaves differently from Q4 Performance users is not visible in the current quartile output. The tab story is captured at the aggregate level only.
+- **Always use median for VDP gap.** Multiple cells show extreme avg/median divergence including sign flips. Q4 30d avg (−157.3%) vs median (+9.5%) is the most severe — never cite the average. See table above.
+- **Performance Q3 VDP gap improvement is not a pricing story.** Inventory repricing turns negative at 30d (−1.8 ppt). The +38.6% VDP gap improvement is almost certainly driven by merchandising or market movement, not price changes.
+- **Performance dealers show absolute VDP/unit decline at 30d (−6.3%).** The competitive gap still improves because competitors decline faster. Distinguish relative-position gains from absolute performance when presenting.
+- **No account_category breakdowns in current results.** Franchise Large vs Small vs Independent segmentation requires adding `current_account_category_simplified` and `dealer_size` back to the `quartiles_post_action_durability.sql` summary grouping.
 
 ---
 
-*Source: `competitive_insights_business_impact/` — branch AN-11916*
+## NEXT STEPS
+
+1. **Add account category segmentation to `quartiles_post_action_durability.sql`.** Uncomment or add `current_account_category_simplified` and `dealer_size` to the summary GROUP BY to get Franchise Large-specific findings. Run at 30d and save a CSV.
+2. **Investigate Q3 VDP gap anomaly.** Inventory repricing is negative at 30d but VDP gap keeps improving. Check merchandising health via `merchandising_health_after_ci_view.sql` — these dealers may be adjusting photos/options rather than price.
+3. **Watch Q2 closely.** Only segment where both inventory repricing and VDP gap deteriorate from 14d to 30d, with n=21. Worth understanding whether these dealers misread the signal or responded with the wrong adjustment.
+4. **Track a 60d window for the early-launch cohort.** Only dealers with first_view_date ≤ Jun 13, 2026 qualify — expect ~20–30 dealers. Even a thin 60d signal on Q1 and Q4 would strengthen the durability narrative.
+5. **Consider re-enabling `first_viewed_tab` in the quartile query** if the audience asks about Performance vs Competitors engagement tiers specifically. Current design trades that interaction for better cell sizes (n=21 vs n=7–14).
+
+---
+
+*Branch AN-11916 | CI product launch: May 21, 2026*
