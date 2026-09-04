@@ -104,13 +104,15 @@ Use interaction events (clicks, QuickAction usage) as the closest available prox
 
 ## Engagement Quartile Classification
 
-Session rate = `distinct CI view days since first_view_date / days from first_view_date to current_date - <window_size>`.
-Bucketed into Q1–Q4 via `ntile(4) over (order by session_rate)`:
+Session rate = `distinct CI view days since first_view_date / datediff('day', first_view_date, current_date())`.
+Denominator is always `current_date()` — window-agnostic lifetime engagement rate. Bucketed into
+Q1–Q4 via `ntile(4) over (order by session_rate)`:
 - **Q1** = least frequent users
 - **Q4** = most frequent users
 
-Classification is **cohort-relative** — Q4 in the 14-day analysis does not equal Q4 in the 60-day
-analysis. Do not compare quartile labels across window sizes.
+Quartile thresholds are computed within the window-eligible cohort (dealers who pass the `having`
+clause), so a one-dealer difference between the 14d and 30d cohorts produces negligible threshold
+drift. Labels are comparable across window sizes for practical purposes.
 
 ---
 
@@ -182,10 +184,10 @@ by default).
 
 | File | Window | Description |
 |---|---|---|
+| `quartiles_post_action_durability.sql` | param | Pricing + VDP durability — by engagement quartile + first tab; window_days = 14/30/60 via `params` CTE |
+| `ci_tabs_post_action_durability.sql` | param | Pricing + VDP durability — aggregate by tab only; no quartile CTEs; window_days = 14/30/60 via `params` CTE |
 | `price_change_after_ci_view.sql` | 14d | Pricing change — full cohort, by engagement quartile + first tab |
 | `price_change_below_benchmark_after_ci_view.sql` | 14d | Pricing change — below-benchmark dealers only |
-| `price_change_durability_30d.sql` | 30d | Pricing change — durability test at 30 days |
-| `price_change_durability_60d.sql` | 60d | Pricing change — durability test at 60 days (thin cohort) |
 | `merchandising_health_after_ci_view.sql` | 14d | Merchandising gaps — QuickAction cohort, by engagement quartile |
 | `competitive_gap_after_ci_view.sql` | 14d | Competitive gap — by engagement quartile + first tab |
 | `competitive_gap_durability_30d.sql` | 30d | Competitive gap — durability test at 30 days |
