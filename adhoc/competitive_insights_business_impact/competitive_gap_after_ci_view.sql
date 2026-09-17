@@ -1,24 +1,22 @@
 /*
-  Pre/Post Competitive Gap & Performance Lift Analysis — CI (Performance Tab)
+  Pre/Post Competitive Gap & Performance Lift Analysis — CI (Performance + Competitors Tabs)
   Sources:
     - Events:       ANALYTICS.TRAFFIC.DEALER_DASHBOARD_EVENTS_NORMALIZED
     - Performance:  ANALYTICS.UNIFIED_DEALER_DATA_MART.PERFORMANCE_HEALTH_METRIC_COMPARISONS
 
-  Design: within-dealer pre/post (14 days each side of first merchandising CTA click date)
+  Design: within-dealer pre/post (14 days each side of first CI view date)
   Clean cohort: dealers with first_view_date <= current_date - 14 (necessary to grab complete post-window)
 
   Metrics (all scoped to used inventory):
-    - leads_per_unit:     dealer leads / total used inventory
-    - vdps_per_unit:      dealer VDP views / total used inventory
-    - avg_days_on_lot:    dealer average days on lot
+    - leads_per_unit:  dealer leads / total used inventory
+    - vdps_per_unit:   dealer VDP views / total used inventory
+    - days_on_lot:     dealer average days on lot
     Competitive gap = dealer metric - competitor metric (positive = dealer ahead for leads/vdps;
     negative = dealer ahead for days on lot).
 
-  Delta interpretation (post - pre) / pre * 100:
-    - Pct lift:   % change in dealer's own metric post vs pre
-      (positive = improvement for leads/vdps; negative = improvement for days on lot)
-    - Gap pct lift: % change in competitive gap, denominator = abs(pre gap) to handle negative baselines
-      (positive = gap widened in dealer's favor for leads/vdps; negative = improved for days on lot)
+  Delta interpretation (post - pre) / |pre| * 100:
+    Positive = improvement for leads/vdps. Negative = improvement for days on lot.
+    Always cite median alongside avg — gap metrics are sensitive to outliers.
 */
 
 with
@@ -34,8 +32,6 @@ dealer_metadata as (
 )
 
 , first_ci_performance_views as (
-    -- One row per dealer: earliest MerchandisingRecommendation CTA click, excluding staff/bots.
-    -- Restricted to dealers with a complete 14-day post-window.
     select
         service_provider_id
       , min(derived_tstamp::date) as first_view_date
@@ -52,22 +48,18 @@ dealer_metadata as (
 )
 
 , performance_snapshots as (
-    -- Daily dealer and competitor metrics per dealer, tagged to their window (pre/post).
     select
         m.service_provider_id
       , m.inventory_date
-      , m.total_leads_used_inventory     / nullif(m.total_used_inventory, 0)    as leads_per_unit
-      , m.total_vdp_views_used_inventory / nullif(m.total_used_inventory, 0)    as vdps_per_unit
-      , m.avg_days_on_lot_used_inventory                                        as days_on_lot
-      
-      , m.competitor_total_leads_used_inventory    / nullif(m.competitor_total_used_inventory, 0)   as comp_leads_per_unit
-      , m.competitor_total_vdp_views_used_inventory / nullif(m.competitor_total_used_inventory, 0)  as comp_vdps_per_unit
-      , m.competitor_avg_days_on_lot_used_inventory                             as comp_days_on_lot
-      
+      , m.total_leads_used_inventory     / nullif(m.total_used_inventory, 0)              as leads_per_unit
+      , m.total_vdp_views_used_inventory / nullif(m.total_used_inventory, 0)              as vdps_per_unit
+      , m.avg_days_on_lot_used_inventory                                                   as days_on_lot
+      , m.competitor_total_leads_used_inventory     / nullif(m.competitor_total_used_inventory, 0) as comp_leads_per_unit
+      , m.competitor_total_vdp_views_used_inventory / nullif(m.competitor_total_used_inventory, 0) as comp_vdps_per_unit
+      , m.competitor_avg_days_on_lot_used_inventory                                        as comp_days_on_lot
       , leads_per_unit - comp_leads_per_unit    as leads_per_unit_gap
-      , vdps_per_unit - comp_vdps_per_unit      as vdps_per_unit_gap
-      , days_on_lot - comp_days_on_lot          as days_on_lot_gap
-      
+      , vdps_per_unit  - comp_vdps_per_unit     as vdps_per_unit_gap
+      , days_on_lot    - comp_days_on_lot       as days_on_lot_gap
       , case
             when m.inventory_date between dateadd('day', -14, fv.first_view_date)
                                       and dateadd('day',  -1, fv.first_view_date) then 'pre'
@@ -82,17 +74,14 @@ dealer_metadata as (
 )
 
 , dealer_performance_windows as (
-    -- Per-dealer average of each metric within each window.
     select
         service_provider_id
-      -- Absolute dealer metrics
-      , avg(case when window_label = 'pre'  then leads_per_unit  end) as avg_leads_per_unit_pre
-      , avg(case when window_label = 'post' then leads_per_unit  end) as avg_leads_per_unit_post
-      , avg(case when window_label = 'pre'  then vdps_per_unit   end) as avg_vdps_per_unit_pre
-      , avg(case when window_label = 'post' then vdps_per_unit   end) as avg_vdps_per_unit_post
-      , avg(case when window_label = 'pre'  then days_on_lot     end) as avg_days_on_lot_pre
-      , avg(case when window_label = 'post' then days_on_lot     end) as avg_days_on_lot_post
-      -- Competitive gap
+      , avg(case when window_label = 'pre'  then leads_per_unit      end) as avg_leads_per_unit_pre
+      , avg(case when window_label = 'post' then leads_per_unit      end) as avg_leads_per_unit_post
+      , avg(case when window_label = 'pre'  then vdps_per_unit       end) as avg_vdps_per_unit_pre
+      , avg(case when window_label = 'post' then vdps_per_unit       end) as avg_vdps_per_unit_post
+      , avg(case when window_label = 'pre'  then days_on_lot         end) as avg_days_on_lot_pre
+      , avg(case when window_label = 'post' then days_on_lot         end) as avg_days_on_lot_post
       , avg(case when window_label = 'pre'  then leads_per_unit_gap  end) as avg_leads_per_unit_gap_pre
       , avg(case when window_label = 'post' then leads_per_unit_gap  end) as avg_leads_per_unit_gap_post
       , avg(case when window_label = 'pre'  then vdps_per_unit_gap   end) as avg_vdps_per_unit_gap_pre
@@ -141,17 +130,14 @@ dealer_metadata as (
         current_account_category_simplified
       , dealer_size
       , count(distinct service_provider_id)                        as total_dealers
-      -- Leads per unit
       , round(avg(pct_lift_leads_per_unit),           1)            as avg_pct_lift_leads_per_unit
       , round(median(pct_lift_leads_per_unit),        1)            as median_pct_lift_leads_per_unit
       , round(avg(pct_lift_leads_per_unit_gap),       1)            as avg_pct_lift_leads_per_unit_gap
       , round(median(pct_lift_leads_per_unit_gap),    1)            as median_pct_lift_leads_per_unit_gap
-      -- VDPs per unit
       , round(avg(pct_lift_vdps_per_unit),            1)            as avg_pct_lift_vdps_per_unit
       , round(median(pct_lift_vdps_per_unit),         1)            as median_pct_lift_vdps_per_unit
       , round(avg(pct_lift_vdps_per_unit_gap),        1)            as avg_pct_lift_vdps_per_unit_gap
       , round(median(pct_lift_vdps_per_unit_gap),     1)            as median_pct_lift_vdps_per_unit_gap
-      -- Days on lot
       , round(avg(pct_lift_days_on_lot),              1)            as avg_pct_lift_days_on_lot
       , round(median(pct_lift_days_on_lot),           1)            as median_pct_lift_days_on_lot
       , round(avg(pct_lift_days_on_lot_gap),          1)            as avg_pct_lift_days_on_lot_gap
@@ -160,8 +146,6 @@ dealer_metadata as (
     group by 1, 2
 )
 
-select
-    *
-from summary
+select * from summary
 -- select * from dealer_level_results
 ;
