@@ -145,8 +145,9 @@ def common_ctes(ew: str, days: int, account_categories: list[str] | None = None,
             on  dm.service_provider_id = sp.location_id
             and dm.region              = sp._region_
         {ddi_join}
-        where pr.enabled = 1
-          and pr.role_name = 'ROLE_DD_ADMIN'
+        where 1=1
+          pr.enabled = 1
+          and pr.role_name like 'ROLE_DD%'
           and sp._region_ = 'NA'
           and sp.location_id in ({dealer_list_override if dealer_list_override is not None else DEALER_LIST})
         qualify row_number() over (partition by sp.location_id, s.user_uuid order by pr.id) = 1
@@ -828,8 +829,9 @@ def load_user_breakdown(_session, dealer_id: int, product_section: str, days: in
         left join warehouse.site.people p on p.id = pr.person_id
         left join warehouse.site.subscribers s on s.person_id = pr.person_id
         {engagement_join}
-        where pr.enabled = 1
-          and pr.role_name = 'ROLE_DD_ADMIN'
+        where
+          pr.enabled = 1
+          and pr.role_name like 'ROLE_DD%''
           and sp.location_id = {dealer_id}
         group by s.user_uuid
     )
