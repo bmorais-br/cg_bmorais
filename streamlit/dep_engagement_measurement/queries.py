@@ -146,7 +146,7 @@ def common_ctes(ew: str, days: int, account_categories: list[str] | None = None,
             and dm.region              = sp._region_
         {ddi_join}
         where 1=1
-          pr.enabled = 1
+          and pr.enabled = 1
           and pr.role_name like 'ROLE_DD%'
           and sp._region_ = 'NA'
           and sp.location_id in ({dealer_list_override if dealer_list_override is not None else DEALER_LIST})
