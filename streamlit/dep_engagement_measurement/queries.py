@@ -3,7 +3,7 @@ import pandas as pd
 from snowflake.snowpark.context import get_active_session
 
 from config import DEALER_LIST
-from dealers import DEALER_DATES
+from dealers import DEALER_DATES as _DEFAULT_DEALER_DATES
 
 
 def _sql_in_list(values: list[str]) -> str:
@@ -235,9 +235,9 @@ def load_dealer_sizes(_session) -> list[str]:
 
 
 @st.cache_data(ttl=3600, show_spinner=False)
-def load_overview(_session, ew: str, days: int, account_categories: tuple[str, ...] = (), accept_staff: bool = True, ddi_only: bool = False, dealer_sizes: tuple[str, ...] = ()) -> tuple[pd.DataFrame, pd.DataFrame]:
+def load_overview(_session, ew: str, days: int, account_categories: tuple[str, ...] = (), accept_staff: bool = True, ddi_only: bool = False, dealer_sizes: tuple[str, ...] = (), dealer_list_override: str | None = None) -> tuple[pd.DataFrame, pd.DataFrame]:
     sql_weekly = f"""
-    with {common_ctes(ew, days, list(account_categories), accept_staff, ddi_only, list(dealer_sizes))}
+    with {common_ctes(ew, days, list(account_categories), accept_staff, ddi_only, list(dealer_sizes), dealer_list_override)}
     , page_views as (
         select
             be.region
@@ -265,7 +265,7 @@ def load_overview(_session, ew: str, days: int, account_categories: tuple[str, .
     """
 
     sql_period = f"""
-    with {common_ctes(ew, days, list(account_categories), accept_staff, ddi_only, list(dealer_sizes))}
+    with {common_ctes(ew, days, list(account_categories), accept_staff, ddi_only, list(dealer_sizes), dealer_list_override)}
     , page_views as (
         select
             be.region
@@ -293,9 +293,9 @@ def load_overview(_session, ew: str, days: int, account_categories: tuple[str, .
 
 
 @st.cache_data(ttl=3600, show_spinner=False)
-def load_performance(_session, ew: str, days: int, account_categories: tuple[str, ...] = (), accept_staff: bool = True, ddi_only: bool = False, dealer_sizes: tuple[str, ...] = ()) -> tuple[pd.DataFrame, pd.DataFrame]:
+def load_performance(_session, ew: str, days: int, account_categories: tuple[str, ...] = (), accept_staff: bool = True, ddi_only: bool = False, dealer_sizes: tuple[str, ...] = (), dealer_list_override: str | None = None) -> tuple[pd.DataFrame, pd.DataFrame]:
     sql_period = f"""
-    with {common_ctes(ew, days, list(account_categories), accept_staff, ddi_only, list(dealer_sizes))}
+    with {common_ctes(ew, days, list(account_categories), accept_staff, ddi_only, list(dealer_sizes), dealer_list_override)}
     , summary as (
         select
             count(distinct be.service_provider_id) as dealers_interacting
@@ -318,7 +318,7 @@ def load_performance(_session, ew: str, days: int, account_categories: tuple[str
     """
 
     sql_dealer = f"""
-    with {common_ctes(ew, days, list(account_categories), accept_staff, ddi_only, list(dealer_sizes))}
+    with {common_ctes(ew, days, list(account_categories), accept_staff, ddi_only, list(dealer_sizes), dealer_list_override)}
     , page_views as (
         select
             be.service_provider_id
@@ -370,9 +370,9 @@ def load_performance(_session, ew: str, days: int, account_categories: tuple[str
 
 
 @st.cache_data(ttl=3600, show_spinner=False)
-def load_competitors(_session, ew: str, days: int, account_categories: tuple[str, ...] = (), accept_staff: bool = True, ddi_only: bool = False, dealer_sizes: tuple[str, ...] = ()) -> tuple[pd.DataFrame, pd.DataFrame]:
+def load_competitors(_session, ew: str, days: int, account_categories: tuple[str, ...] = (), accept_staff: bool = True, ddi_only: bool = False, dealer_sizes: tuple[str, ...] = (), dealer_list_override: str | None = None) -> tuple[pd.DataFrame, pd.DataFrame]:
     sql_period = f"""
-    with {common_ctes(ew, days, list(account_categories), accept_staff, ddi_only, list(dealer_sizes))}
+    with {common_ctes(ew, days, list(account_categories), accept_staff, ddi_only, list(dealer_sizes), dealer_list_override)}
     , summary as (
         select
             count(distinct be.service_provider_id) as dealers_interacting
@@ -395,7 +395,7 @@ def load_competitors(_session, ew: str, days: int, account_categories: tuple[str
     """
 
     sql_dealer = f"""
-    with {common_ctes(ew, days, list(account_categories), accept_staff, ddi_only, list(dealer_sizes))}
+    with {common_ctes(ew, days, list(account_categories), accept_staff, ddi_only, list(dealer_sizes), dealer_list_override)}
     , page_views as (
         select
             be.service_provider_id
@@ -447,9 +447,9 @@ def load_competitors(_session, ew: str, days: int, account_categories: tuple[str
 
 
 @st.cache_data(ttl=3600, show_spinner=False)
-def load_feature_breakdown(_session, ew: str, days: int, account_categories: tuple[str, ...] = (), accept_staff: bool = True, ddi_only: bool = False, dealer_sizes: tuple[str, ...] = ()) -> pd.DataFrame:
+def load_feature_breakdown(_session, ew: str, days: int, account_categories: tuple[str, ...] = (), accept_staff: bool = True, ddi_only: bool = False, dealer_sizes: tuple[str, ...] = (), dealer_list_override: str | None = None) -> pd.DataFrame:
     sql = f"""
-    with {common_ctes(ew, days, list(account_categories), accept_staff, ddi_only, list(dealer_sizes))}
+    with {common_ctes(ew, days, list(account_categories), accept_staff, ddi_only, list(dealer_sizes), dealer_list_override)}
     , vin_interactions_by_element as (
         select
             be.region
@@ -514,9 +514,9 @@ def load_feature_breakdown(_session, ew: str, days: int, account_categories: tup
 
 
 @st.cache_data(ttl=3600, show_spinner=False)
-def load_active_rates(_session, ew: str, days: int, account_categories: tuple[str, ...] = (), accept_staff: bool = True, ddi_only: bool = False, dealer_sizes: tuple[str, ...] = ()) -> pd.DataFrame:
+def load_active_rates(_session, ew: str, days: int, account_categories: tuple[str, ...] = (), accept_staff: bool = True, ddi_only: bool = False, dealer_sizes: tuple[str, ...] = (), dealer_list_override: str | None = None) -> pd.DataFrame:
     sql = f"""
-    with {common_ctes(ew, days, list(account_categories), accept_staff, ddi_only, list(dealer_sizes))}
+    with {common_ctes(ew, days, list(account_categories), accept_staff, ddi_only, list(dealer_sizes), dealer_list_override)}
     , base_stats as (
         select
             date           as session_date
@@ -572,7 +572,7 @@ def load_active_rates(_session, ew: str, days: int, account_categories: tuple[st
 
 
 @st.cache_data(ttl=3600, show_spinner=False)
-def load_return_rate(_session, ew: str, days: int, account_categories: tuple[str, ...] = (), accept_staff: bool = True, ddi_only: bool = False, dealer_sizes: tuple[str, ...] = ()) -> tuple[pd.DataFrame, pd.DataFrame]:
+def load_return_rate(_session, ew: str, days: int, account_categories: tuple[str, ...] = (), accept_staff: bool = True, ddi_only: bool = False, dealer_sizes: tuple[str, ...] = (), dealer_list_override: str | None = None) -> tuple[pd.DataFrame, pd.DataFrame]:
     _shared_ctes = f"""
     first_visits as (
         -- All-time first page view per (user, dealer) — no date upper bound so we get true first visit.
@@ -630,7 +630,7 @@ def load_return_rate(_session, ew: str, days: int, account_categories: tuple[str
     )"""
 
     sql_summary = f"""
-    with {common_ctes(ew, days, list(account_categories), accept_staff, ddi_only, list(dealer_sizes))}
+    with {common_ctes(ew, days, list(account_categories), accept_staff, ddi_only, list(dealer_sizes), dealer_list_override)}
     , {_shared_ctes}
     , dealer_rollup as (
         select
@@ -654,7 +654,7 @@ def load_return_rate(_session, ew: str, days: int, account_categories: tuple[str
     """
 
     sql_dealer = f"""
-    with {common_ctes(ew, days, list(account_categories), accept_staff, ddi_only, list(dealer_sizes))}
+    with {common_ctes(ew, days, list(account_categories), accept_staff, ddi_only, list(dealer_sizes), dealer_list_override)}
     , {_shared_ctes}
     select
         cwf.service_provider_id                                                      as dealer_id
@@ -677,12 +677,13 @@ def load_return_rate(_session, ew: str, days: int, account_categories: tuple[str
 
 
 @st.cache_data(ttl=3600, show_spinner=False)
-def load_adoption_rate(_session, ew: str, days: int, account_categories: tuple[str, ...] = (), accept_staff: bool = True, ddi_only: bool = False, dealer_sizes: tuple[str, ...] = ()) -> pd.DataFrame:
+def load_adoption_rate(_session, ew: str, days: int, account_categories: tuple[str, ...] = (), accept_staff: bool = True, ddi_only: bool = False, dealer_sizes: tuple[str, ...] = (), dealer_list_override: str | None = None, dealer_dates: tuple[tuple[int, str], ...] | None = None) -> pd.DataFrame:
+    dates = dict(dealer_dates) if dealer_dates is not None else _DEFAULT_DEALER_DATES
     dealer_start_values = ", ".join(
-        f"({spid}, '{start}'::date)" for spid, start in DEALER_DATES.items()
+        f"({spid}, '{start}'::date)" for spid, start in dates.items()
     )
     sql = f"""
-    with {common_ctes(ew, days, list(account_categories), accept_staff, ddi_only, list(dealer_sizes))}
+    with {common_ctes(ew, days, list(account_categories), accept_staff, ddi_only, list(dealer_sizes), dealer_list_override)}
     , dealer_start_dates as (
         select column1 as service_provider_id, column2 as start_date
         from values {dealer_start_values}
@@ -716,9 +717,9 @@ def load_adoption_rate(_session, ew: str, days: int, account_categories: tuple[s
 
 
 @st.cache_data(ttl=3600, show_spinner=False)
-def load_cross_page_rate(_session, ew: str, days: int, account_categories: tuple[str, ...] = (), accept_staff: bool = True, ddi_only: bool = False, dealer_sizes: tuple[str, ...] = ()) -> pd.DataFrame:
+def load_cross_page_rate(_session, ew: str, days: int, account_categories: tuple[str, ...] = (), accept_staff: bool = True, ddi_only: bool = False, dealer_sizes: tuple[str, ...] = (), dealer_list_override: str | None = None) -> pd.DataFrame:
     sql = f"""
-    with {common_ctes(ew, days, list(account_categories), accept_staff, ddi_only, list(dealer_sizes))}
+    with {common_ctes(ew, days, list(account_categories), accept_staff, ddi_only, list(dealer_sizes), dealer_list_override)}
     , first_tab_visit as (
         -- Earliest page view per (user, dealer) within the selected window — captures which tab they started on.
         select

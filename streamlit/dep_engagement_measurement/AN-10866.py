@@ -2,7 +2,13 @@ import streamlit as st
 import pandas as pd
 from snowflake.snowpark.context import get_active_session
 
-from config import ACCEPT_STAFF, C_BLUE, C_GREEN, C_AMBER, C_PURPLE, TZ_EASTERN
+from config import (
+    ACCEPT_STAFF, C_BLUE, C_GREEN, C_AMBER, C_PURPLE, TZ_EASTERN,
+    DEALER_LIST, DEALER_DATES,
+    AUTONATION_LIST, AUTONATION_DATES,
+    KEN_GRAFF_LIST, KEN_GRAFF_DATES,
+    SHOPPER_SIGNALS_LIST, SHOPPER_SIGNALS_DATES,
+)
 from queries import (
     load_account_categories,
     load_dealer_sizes,
@@ -26,11 +32,25 @@ st.set_page_config(
     layout="wide",
 )
 
+_COHORTS = {
+    "Beta Dealers":        (DEALER_LIST,         tuple(DEALER_DATES.items())),
+    "AutoNation":          (AUTONATION_LIST,      tuple(AUTONATION_DATES.items())),
+    "Ken Graff Automotive": (KEN_GRAFF_LIST,      tuple(KEN_GRAFF_DATES.items())),
+    "Shopper Signals":     (SHOPPER_SIGNALS_LIST, tuple(SHOPPER_SIGNALS_DATES.items())),
+}
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Sidebar
 # ─────────────────────────────────────────────────────────────────────────────
 with st.sidebar:
     st.title("⚙️ Filters")
+    cohort_label = st.selectbox(
+        "Dealer cohort",
+        options=list(_COHORTS.keys()),
+        index=0,
+        help="Switch the entire dealer population used in all metrics and denominators.",
+    )
+    st.divider()
     engagement_only = st.toggle(
         "Engaged users only (last 6 months)",
         value=True,
@@ -78,6 +98,7 @@ engagement_where = "used_dep_last_180_days" if engagement_only else "true"
 ddi_filter_active = ddi_only
 dealer_size_tuple = tuple(selected_dealer_sizes)
 cat_tuple = tuple(selected_categories)
+cohort_list, cohort_dates = _COHORTS[cohort_label]
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Load data
@@ -85,14 +106,14 @@ cat_tuple = tuple(selected_categories)
 
 with st.spinner("Loading data…"):
     df_freshness                             = normalize_cols(load_data_freshness(session))
-    df_overview, df_overview_kpi             = [normalize_cols(d) for d in load_overview(session, engagement_where, days, cat_tuple, ACCEPT_STAFF, ddi_filter_active, dealer_size_tuple)]
-    df_perf_dealer, df_perf_kpi = [normalize_cols(d) for d in load_performance(session, engagement_where, days, cat_tuple, ACCEPT_STAFF, ddi_filter_active, dealer_size_tuple)]
-    df_comp_dealer, df_comp_kpi = [normalize_cols(d) for d in load_competitors(session, engagement_where, days, cat_tuple, ACCEPT_STAFF, ddi_filter_active, dealer_size_tuple)]
-    df_feature_breakdown                     = normalize_cols(load_feature_breakdown(session, engagement_where, days, cat_tuple, ACCEPT_STAFF, ddi_filter_active, dealer_size_tuple))
-    df_active_rates                          = normalize_cols(load_active_rates(session, engagement_where, days, cat_tuple, ACCEPT_STAFF, ddi_filter_active, dealer_size_tuple))
-    df_return_kpi, df_return_dealer          = [normalize_cols(d) for d in load_return_rate(session, engagement_where, days, cat_tuple, ACCEPT_STAFF, ddi_filter_active, dealer_size_tuple)]
-    df_adoption                              = normalize_cols(load_adoption_rate(session, engagement_where, days, cat_tuple, ACCEPT_STAFF, ddi_filter_active, dealer_size_tuple))
-    df_cross_page                            = normalize_cols(load_cross_page_rate(session, engagement_where, days, cat_tuple, ACCEPT_STAFF, ddi_filter_active, dealer_size_tuple))
+    df_overview, df_overview_kpi             = [normalize_cols(d) for d in load_overview(session, engagement_where, days, cat_tuple, ACCEPT_STAFF, ddi_filter_active, dealer_size_tuple, cohort_list)]
+    df_perf_dealer, df_perf_kpi              = [normalize_cols(d) for d in load_performance(session, engagement_where, days, cat_tuple, ACCEPT_STAFF, ddi_filter_active, dealer_size_tuple, cohort_list)]
+    df_comp_dealer, df_comp_kpi              = [normalize_cols(d) for d in load_competitors(session, engagement_where, days, cat_tuple, ACCEPT_STAFF, ddi_filter_active, dealer_size_tuple, cohort_list)]
+    df_feature_breakdown                     = normalize_cols(load_feature_breakdown(session, engagement_where, days, cat_tuple, ACCEPT_STAFF, ddi_filter_active, dealer_size_tuple, cohort_list))
+    df_active_rates                          = normalize_cols(load_active_rates(session, engagement_where, days, cat_tuple, ACCEPT_STAFF, ddi_filter_active, dealer_size_tuple, cohort_list))
+    df_return_kpi, df_return_dealer          = [normalize_cols(d) for d in load_return_rate(session, engagement_where, days, cat_tuple, ACCEPT_STAFF, ddi_filter_active, dealer_size_tuple, cohort_list)]
+    df_adoption                              = normalize_cols(load_adoption_rate(session, engagement_where, days, cat_tuple, ACCEPT_STAFF, ddi_filter_active, dealer_size_tuple, cohort_list, cohort_dates))
+    df_cross_page                            = normalize_cols(load_cross_page_rate(session, engagement_where, days, cat_tuple, ACCEPT_STAFF, ddi_filter_active, dealer_size_tuple, cohort_list))
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Tabs
