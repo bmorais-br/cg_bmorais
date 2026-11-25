@@ -7,6 +7,7 @@
 --      percentile positions (e.g. p65 -> p40 = -25).
 --   3. The distribution of those position changes, per metric x month x peer group, gives the
 --      Tukey lower fence (Q1 - 1.5 * IQR). A dealer that dropped further than the fence is flagged.
+--      A fixed fence of -20 positions can be used instead (see the hardcoded alternative in the stats CTE).
 --
 -- Metrics (per-unit rates from performance_health_metric_monthly_changes):
 --   leads_per_unit_used_inventory       (LPU)
@@ -17,6 +18,7 @@
 -- between months is compared against a different peer group each month.
 -- Segments with fewer than 30 dealers are dropped, both for ranking and for the fence.
 --
+-- Output table: outlier_base_percentile_rank_method (outlier_base is the Tukey MoM-change table from 01).
 -- Output matches outlier_base (01_outlier_base_mom_tukey.sql), except:
 --   mom_pct                -> percentile_change   (percentile positions, not a % change)
 --   + metric_value, percentile_rank, prior_percentile_rank at the end
@@ -28,7 +30,7 @@
 -- Reference months are 2026-05-01 to 2026-10-01; April is pulled only for the prior-month rank.
 
 create schema if not exists sandbox_bmorais.outlier_analysis;
-create or replace transient table sandbox_bmorais.outlier_analysis.outlier_base_pct_changes_method as
+create or replace transient table sandbox_bmorais.outlier_analysis.outlier_base_percentile_rank_method as
 with unpivoted as (
     select
         service_provider_id
@@ -102,6 +104,9 @@ stats as (
         , percentile_cont(0.75) within group (order by percentile_change)  as q3
         , q3 - q1                                                    as iqr
         , q1 - 1.5 * iqr                                             as lower_fence
+        -- Hardcoded alternative (used for the results shared on the ticket): replace the Tukey line above with
+        --   , -20                                                    as lower_fence   -- flag drops of more than 20 percentile positions
+        -- (-20 = a dealer must fall more than 20 percentile positions vs. the prior month; q1/q3/iqr are then not needed)
     from changes
     group by
         metric_name
@@ -148,7 +153,7 @@ select
     , count(distinct inventory_date)                                                    as total_months
     , count_if(is_lower_outlier)                                                        as flagged_dealer_months
     , count(*)                                                                          as dealer_months
-from sandbox_bmorais.outlier_analysis.outlier_base_pct_changes_method
+from sandbox_bmorais.outlier_analysis.outlier_base_percentile_rank_method
 group by all
 order by 1, 2, 3
 ;
