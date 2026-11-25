@@ -1,4 +1,4 @@
--- Step 1: Multi-month outlier base (segmented distributions)
+-- Outlier base, MoM-change method (Tukey lower fence), segmented distributions
 --
 -- Stats (percentiles, fences) are computed per metric × month ×
 -- inventory_size_bucket × current_account_category so each dealer

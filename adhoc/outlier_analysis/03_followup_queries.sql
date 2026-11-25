@@ -1,8 +1,8 @@
--- Follow-up queries on outlier_base + dealer_month_signals (run after Steps 1 and 4).
+-- Follow-up queries on outlier_base + dealer_month_signals (run after 01 or 01b, and 02).
 -- Change the metric in the where clause to look at another metric.
 --
 -- Reference months to look at (inclusive, first of the month). Single month = same start and end.
--- The tables only contain 2026-05-01 to 2026-10-01 (the Step 1 window), so stay inside that range.
+-- The tables only contain 2026-05-01 to 2026-10-01 (the 01 window), so stay inside that range.
 set start_month = '2026-10-01';
 set end_month   = '2026-10-01';
 
@@ -11,8 +11,6 @@ set end_month   = '2026-10-01';
 --    This is the group the flag is defined in (percentile ranks and the outlier flag are
 --    computed within each month x size bucket x account category), so flagged and not-flagged
 --    dealers are compared only against dealers in the same peer group.
---    (dealer-level, includes every dealer, so totals differ slightly from Step 6,
---     which drops cells with fewer than 10 dealers)
 --    Small cells are noisy: check the dealers column before reading the percentages.
 -- =====================================================================
 with d as (

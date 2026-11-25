@@ -1,4 +1,4 @@
--- Step 1b: Outlier base, percentile-position method (alternative to the MoM-change method in Step 1)
+-- Outlier base, percentile-position method (alternative to 01_outlier_base_mom_tukey.sql)
 --
 -- Instead of taking the MoM % change of each metric and finding outliers in that distribution:
 --   1. Rank every dealer on the metric itself (per-unit rate) within its peer group and month,
@@ -12,12 +12,12 @@
 --   leads_per_unit_used_inventory       (LPU)
 --   connections_per_unit_used_inventory (CPU)
 --
--- Peer group = inventory_size_bucket x current_account_category (same as Step 1), measured in each
+-- Peer group = inventory_size_bucket x current_account_category (same as 01_outlier_base_mom_tukey.sql), measured in each
 -- month. Ranks are computed within each month's peer group, so a dealer that changes size bucket
 -- between months is compared against a different peer group each month.
 -- Segments with fewer than 30 dealers are dropped, both for ranking and for the fence.
 --
--- Output matches outlier_base (Step 1), except:
+-- Output matches outlier_base (01_outlier_base_mom_tukey.sql), except:
 --   mom_pct                -> percentile_change   (percentile positions, not a % change)
 --   + metric_value, percentile_rank, prior_percentile_rank at the end
 -- Units: percentile_change, p05, lower_fence and distance_to_lower_fence are in percentile

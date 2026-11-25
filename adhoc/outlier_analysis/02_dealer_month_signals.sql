@@ -1,11 +1,10 @@
--- Step 3 fix: in dealer_months, replace b.current_account_category_simplified with
--- b.current_account_category (outlier_base only carries current_account_category), and
--- do the same in the final select / group by / order by.
-
 -- =====================================================================
--- Step 4: Dealer-month signals (churn / inventory blackout / deal-rating mix)
+-- Dealer-month signals (churn / inventory blackout / deal-rating mix)
 -- One row per dealer x month for every dealer in outlier_base, so outliers
 -- can be compared with non-outliers. Metric-independent.
+-- Built from the dealers in outlier_base (01_outlier_base_mom_tukey.sql). Dealer-months that exist only in
+-- the percentile-method table (01b) are not covered (14 over May-Oct at the last check); point base_dealers
+-- at a union of both tables if you need them.
 --
 -- Churn / downgrade (analytics.mrr.daily_paying_subscriptions, daily grain), tier-based:
 --   Tier ladder: Featured Priority (4) > Featured (3) > Enhanced (2) > Standard (1) > none (0).
@@ -30,8 +29,8 @@
 --
 -- Deal-rating mix (used inventory, share of total_used_inventory_dates):
 --   good_or_better = great + good; bad = high price + overpriced.
---   "worsened" = bad share up > 5pp OR good_or_better share down > 5pp vs. prior month.
--- Thresholds are inline below; change them there.
+--   "worsened" = bad share up at least 15pp OR good_or_better share down at least 15pp vs. prior month.
+-- Thresholds are inline below; change them there (deal-mix threshold is 15pp; it was 5pp in earlier runs).
 -- =====================================================================
 create or replace transient table sandbox_bmorais.outlier_analysis.dealer_month_signals as
 with base_dealers as (
@@ -159,77 +158,7 @@ select
       end                                                                         as blackout_pattern
     , pct_good_or_better_current - pct_good_or_better_prior                           as good_or_better_change_pp
     , pct_bad_current - pct_bad_prior                                                 as bad_change_pp
-    , (pct_bad_current - pct_bad_prior >= 5
-        or pct_good_or_better_current - pct_good_or_better_prior <= -5)                as is_deal_mix_worsened
+    , (pct_bad_current - pct_bad_prior >= 15
+        or pct_good_or_better_current - pct_good_or_better_prior <= -15)                as is_deal_mix_worsened
 from joined
-;
-
--- =====================================================================
--- Step 5: Lower-outlier dealers with their signals (dealer-level detail)
--- =====================================================================
-select
-    b.metric_name
-    , b.inventory_date                                                                as reference_month
-    , b.service_provider_id
-    , s.sf_account_id
-    , b.inventory_size_bucket
-    , b.current_account_category
-    , round(b.mom_pct, 2)                                                             as mom_pct
-    , round(b.distance_to_lower_fence, 2)                                             as distance_to_lower_fence_pp
-    , s.churn_type
-    , s.tier_prior
-    , s.tier_current
-    , round(s.avg_inventory_mom_pct, 2)                                               as avg_inventory_mom_pct
-    , s.days_without_inventory
-    , s.is_inventory_blackout
-    , s.is_inventory_blackout_prior
-    , s.blackout_pattern
-    , round(s.good_or_better_change_pp, 2)                                            as good_or_better_change_pp
-    , round(s.bad_change_pp, 2)                                                       as bad_change_pp
-    , s.is_deal_mix_worsened
-    , (s.is_churned or s.is_downgrade or s.is_inventory_blackout)                     as has_churn_or_blackout
-from sandbox_bmorais.outlier_analysis.outlier_base b
-inner join sandbox_bmorais.outlier_analysis.dealer_month_signals s
-    on b.service_provider_id = s.service_provider_id
-    and b.inventory_date = s.inventory_date
-where b.is_lower_outlier
-    and b.metric_name like 'LEADS_PER_UNIT%'
-order by b.inventory_date, b.inventory_size_bucket, b.current_account_category, b.distance_to_lower_fence
-;
-
--- =====================================================================
--- Step 6: Outliers vs. non-outliers on the signals, per reference month
--- Rates are % of dealers in the group. Cells with fewer than 10 dealers are dropped.
--- =====================================================================
-select
-    b.metric_name
-    , b.inventory_date                                                                as reference_month
-    , b.inventory_size_bucket
-    , b.current_account_category
-    , iff(b.is_lower_outlier, '🔴 lower outlier', '🟢 non-outlier')                         as dealer_group
-    , count(*)                                                                        as dealers
-    , round(100 * count_if(s.is_churned) / count(*), 2)                               as churned_pct
-    , round(100 * count_if(s.is_downgrade) / count(*), 2)                             as downgrade_pct
-    , round(100 * count_if(s.is_inventory_blackout) / count(*), 2)                    as inventory_blackout_pct
-    , round(100 * count_if(s.blackout_pattern = 'repeat blackout (also prior month)') / count(*), 2) as repeat_blackout_pct
-    , round(100 * count_if(s.blackout_pattern = 'new blackout') / count(*), 2)        as new_blackout_pct
-    , round(100 * count_if(s.is_churned or s.is_downgrade or s.is_inventory_blackout) / count(*), 2)
-                                                                                      as any_churn_or_blackout_pct
-    , round(avg(s.pct_great_current), 2)                                              as avg_pct_great
-    , round(avg(s.pct_good_current), 2)                                               as avg_pct_good
-    , round(avg(s.pct_fair_current), 2)                                               as avg_pct_fair
-    , round(avg(s.pct_high_price_current), 2)                                         as avg_pct_high_price
-    , round(avg(s.pct_overpriced_current), 2)                                         as avg_pct_overpriced
-    , round(avg(s.pct_unrated_current), 2)                                            as avg_pct_unrated
-    , round(avg(s.good_or_better_change_pp), 2)                                       as avg_good_or_better_change_pp
-    , round(avg(s.bad_change_pp), 2)                                                  as avg_bad_change_pp
-    , round(100 * count_if(s.is_deal_mix_worsened) / count(s.is_deal_mix_worsened), 2) as deal_mix_worsened_pct
-from sandbox_bmorais.outlier_analysis.outlier_base b
-inner join sandbox_bmorais.outlier_analysis.dealer_month_signals s
-    on b.service_provider_id = s.service_provider_id
-    and b.inventory_date = s.inventory_date
-where b.metric_name like 'LEADS_PER_UNIT%'
-group by all
-having dealers >= 10
-order by metric_name, reference_month, inventory_size_bucket, current_account_category, dealer_group
 ;
